@@ -1,0 +1,18 @@
+Analyzing admin_dashboard.dart...                               
+
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\dashboard\admin_dashboard.dart:273:30 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\dashboard\admin_dashboard.dart:273:54 - deprecated_member_use
+warning - The declaration '_buildActionCard' isn't referenced - lib\screens\dashboard\admin_dashboard.dart:346:10 - unused_element
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\dashboard\admin_dashboard.dart:363:30 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\dashboard\admin_dashboard.dart:363:54 - deprecated_member_use
+warning - A value for optional parameter 'key' isn't ever given - lib\screens\dashboard\admin_dashboard.dart:409:11 - unused_element_parameter
+warning - The value of the field '_tabController' isn't used - lib\screens\dashboard\admin_dashboard.dart:419:22 - unused_field
+warning - The declaration '_buildPaymentAppointmentContent' isn't referenced - lib\screens\dashboard\admin_dashboard.dart:854:10 - unused_element
+warning - The declaration '_buildStudyLoadContent' isn't referenced - lib\screens\dashboard\admin_dashboard.dart:885:10 - unused_element
+   info - 'value' is deprecated and shouldn't be used. Use initialValue instead. This will set the initial value for the form field. This feature was deprecated after v3.33.0-1.0.pre - lib\screens\dashboard\admin_dashboard.dart:940:21 - deprecated_member_use
+warning - The declaration '_buildCurriculumContent' isn't referenced - lib\screens\dashboard\admin_dashboard.dart:1031:10 - unused_element
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\dashboard\admin_dashboard.dart:1191:30 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\dashboard\admin_dashboard.dart:1191:54 - deprecated_member_use
+warning - The declaration '_getAllAvailableCourses' isn't referenced - lib\screens\dashboard\admin_dashboard.dart:1803:30 - unused_element
+
+14 issues found. (ran in 1.4s)
