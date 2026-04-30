@@ -1,172 +1,184 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/user.dart';
 
 class AuthProvider extends ChangeNotifier {
-  User? _currentUser;
-  List<User> _users = [];
+  static const String _baseUrl = 'https://localhost:7164';
+
+  String? _token;
+  String? _email;
+  String? _fullName;
+  String? _role;
+
+  String? _firstName;
+  String? _lastName;
+  String? _phoneNumber;
+  String? _address;
+  DateTime? _birthDate;
+
   bool _isLoading = false;
   String? _errorMessage;
   bool _initialized = false;
 
-  User? get currentUser => _currentUser;
-  List<User> get users => _users;
+  String? get token => _token;
+  String? get email => _email;
+  String? get fullName => _fullName;
+  String? get role => _role;
+
+  String? get firstName => _firstName;
+  String? get lastName => _lastName;
+  String? get phoneNumber => _phoneNumber;
+  String? get address => _address;
+  DateTime? get birthDate => _birthDate;
+
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
-  bool get isAuthenticated => _currentUser != null && _currentUser!.isLoggedIn;
   bool get isInitialized => _initialized;
+  bool get isAuthenticated => _token != null && _token!.isNotEmpty;
 
   AuthProvider() {
-    _initialized = true;
-    if (kDebugMode) {
-      print('AuthProvider initialized');
-    }
+    loadAuthData();
   }
 
   Future<void> loadAuthData() async {
     try {
-      await _loadUsers();
-      await _loadCurrentUser();
+      final prefs = await SharedPreferences.getInstance();
+
+      _token = prefs.getString('token');
+      _email = prefs.getString('email');
+      _fullName = prefs.getString('fullName');
+      _role = prefs.getString('role');
+
+      _firstName = prefs.getString('firstName');
+      _lastName = prefs.getString('lastName');
+      _phoneNumber = prefs.getString('phoneNumber');
+      _address = prefs.getString('address');
+
+      final birthDateString = prefs.getString('birthDate');
+      _birthDate = birthDateString != null && birthDateString.isNotEmpty
+          ? DateTime.tryParse(birthDateString)
+          : null;
+
+      _initialized = true;
       notifyListeners();
     } catch (e) {
       _errorMessage = 'Error loading auth data: $e';
-      if (kDebugMode) {
-        print('AuthProvider.loadAuthData error: $e');
-      }
+      _initialized = true;
       notifyListeners();
     }
   }
 
-  Future<void> _loadUsers() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final usersJson = prefs.getStringList('users') ?? [];
-      _users = usersJson.map((jsonString) {
-        try {
-          return User.fromJson(
-            Map<String, dynamic>.from(jsonDecode(jsonString) as Map),
-          );
-        } catch (e) {
-          if (kDebugMode) {
-            print('Error parsing user: $e');
-          }
-          rethrow;
-        }
-      }).toList();
-      notifyListeners();
-    } catch (e) {
-      _errorMessage = 'Error loading users: $e';
-      if (kDebugMode) {
-        print('AuthProvider._loadUsers error: $e');
-      }
-      notifyListeners();
+  Future<void> _saveSession({
+    required String token,
+    required String email,
+    required String fullName,
+    required String role,
+    String? firstName,
+    String? lastName,
+    String? phoneNumber,
+    String? address,
+    DateTime? birthDate,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    await prefs.setString('token', token);
+    await prefs.setString('email', email);
+    await prefs.setString('fullName', fullName);
+    await prefs.setString('role', role);
+
+    if (firstName != null) {
+      await prefs.setString('firstName', firstName);
     }
+    if (lastName != null) {
+      await prefs.setString('lastName', lastName);
+    }
+    if (phoneNumber != null) {
+      await prefs.setString('phoneNumber', phoneNumber);
+    }
+    if (address != null) {
+      await prefs.setString('address', address);
+    }
+    if (birthDate != null) {
+      await prefs.setString('birthDate', birthDate.toIso8601String());
+    }
+
+    _token = token;
+    _email = email;
+    _fullName = fullName;
+    _role = role;
+    _firstName = firstName ?? _firstName;
+    _lastName = lastName ?? _lastName;
+    _phoneNumber = phoneNumber ?? _phoneNumber;
+    _address = address ?? _address;
+    _birthDate = birthDate ?? _birthDate;
   }
 
-  Future<void> _saveUsers() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final usersJson = _users
-          .map((user) => jsonEncode(user.toJson()))
-          .toList();
-      await prefs.setStringList('users', usersJson);
-    } catch (e) {
-      _errorMessage = 'Error saving users: $e';
-      notifyListeners();
-    }
-  }
+  Future<void> _clearSession() async {
+    final prefs = await SharedPreferences.getInstance();
 
-  Future<void> _loadCurrentUser() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final currentUserJson = prefs.getString('currentUser');
-      if (currentUserJson != null) {
-        try {
-          _currentUser = User.fromJson(
-            Map<String, dynamic>.from(jsonDecode(currentUserJson) as Map),
-          );
-        } catch (e) {
-          if (kDebugMode) {
-            print('Error parsing current user: $e');
-          }
-          rethrow;
-        }
-      }
-      notifyListeners();
-    } catch (e) {
-      _errorMessage = 'Error loading current user: $e';
-      if (kDebugMode) {
-        print('AuthProvider._loadCurrentUser error: $e');
-      }
-      notifyListeners();
-    }
-  }
+    await prefs.remove('token');
+    await prefs.remove('email');
+    await prefs.remove('fullName');
+    await prefs.remove('role');
+    await prefs.remove('firstName');
+    await prefs.remove('lastName');
+    await prefs.remove('phoneNumber');
+    await prefs.remove('address');
+    await prefs.remove('birthDate');
 
-  Future<void> _saveCurrentUser() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      if (_currentUser != null) {
-        await prefs.setString(
-          'currentUser',
-          jsonEncode(_currentUser!.toJson()),
-        );
-      } else {
-        await prefs.remove('currentUser');
-      }
-    } catch (e) {
-      _errorMessage = 'Error saving current user: $e';
-      notifyListeners();
-    }
-  }
-
-  Future<void> updateCurrentUser(User updatedUser) async {
-    _currentUser = updatedUser.copyWith(isLoggedIn: true);
-
-    final index = _users.indexWhere((user) => user.id == updatedUser.id);
-    if (index >= 0) {
-      _users[index] = updatedUser;
-      await _saveUsers();
-    }
-
-    await _saveCurrentUser();
-    notifyListeners();
+    _token = null;
+    _email = null;
+    _fullName = null;
+    _role = null;
+    _firstName = null;
+    _lastName = null;
+    _phoneNumber = null;
+    _address = null;
+    _birthDate = null;
   }
 
   Future<bool> register(
-    String fullName,
     String email,
     String password,
-    StudentType studentType,
+    String firstName,
+    String lastName,
   ) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      // Check if email already exists
-      if (_users.any((user) => user.email == email)) {
-        _errorMessage = 'Email already exists';
-        _isLoading = false;
-        notifyListeners();
-        return false;
-      }
+      final uri = Uri.parse('$_baseUrl/api/Auth/register');
 
-      final newUser = User(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        fullName: fullName,
-        email: email,
-        password: password,
-        studentType: studentType,
+      final response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json', 'Accept': '*/*'},
+        body: jsonEncode({
+          'email': email.trim(),
+          'password': password.trim(),
+          'firstName': firstName.trim(),
+          'lastName': lastName.trim(),
+        }),
       );
 
-      _users.add(newUser);
-      await _saveUsers();
+      if (response.statusCode == 200) {
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+
+      try {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        _errorMessage = data['message']?.toString() ?? 'Registration failed.';
+      } catch (_) {
+        _errorMessage = 'Registration failed. Status: ${response.statusCode}';
+      }
 
       _isLoading = false;
       notifyListeners();
-      return true;
+      return false;
     } catch (e) {
       _errorMessage = 'Registration failed: $e';
       _isLoading = false;
@@ -181,19 +193,128 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final user = _users.firstWhere(
-        (u) => u.email == email && u.password == password,
-        orElse: () => throw Exception('Invalid credentials'),
+      final uri = Uri.parse('$_baseUrl/api/Auth/login');
+
+      final response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json', 'Accept': '*/*'},
+        body: jsonEncode({'email': email.trim(), 'password': password.trim()}),
       );
 
-      _currentUser = user.copyWith(isLoggedIn: true);
-      await _saveCurrentUser();
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+
+        final token = data['token']?.toString() ?? '';
+        final fullName = data['fullName']?.toString() ?? '';
+        final responseEmail = data['email']?.toString() ?? '';
+        final role = data['role']?.toString() ?? '';
+
+        await _saveSession(
+          token: token,
+          email: responseEmail,
+          fullName: fullName,
+          role: role,
+        );
+
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+
+      try {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        _errorMessage =
+            data['message']?.toString() ?? 'Invalid email or password.';
+      } catch (_) {
+        _errorMessage = 'Login failed. Status: ${response.statusCode}';
+      }
 
       _isLoading = false;
       notifyListeners();
-      return true;
+      return false;
     } catch (e) {
-      _errorMessage = 'Login failed: Invalid email or password';
+      _errorMessage = 'Login failed: $e';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> updateProfile({
+    required String firstName,
+    required String lastName,
+    required String phoneNumber,
+    required String address,
+    required DateTime birthDate,
+  }) async {
+    if (_token == null || _token!.isEmpty) {
+      _errorMessage = 'You are not logged in.';
+      notifyListeners();
+      return false;
+    }
+
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final uri = Uri.parse('$_baseUrl/api/StudentProfiles/me');
+
+      final response = await http.put(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': '*/*',
+          'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'firstName': firstName.trim(),
+          'lastName': lastName.trim(),
+          'phoneNumber': phoneNumber.trim(),
+          'address': address.trim(),
+          'birthDate': birthDate.toIso8601String(),
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final newFullName = '${firstName.trim()} ${lastName.trim()}'.trim();
+
+        await _saveSession(
+          token: _token!,
+          email: _email ?? '',
+          fullName: newFullName,
+          role: _role ?? '',
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          phoneNumber: phoneNumber.trim(),
+          address: address.trim(),
+          birthDate: birthDate,
+        );
+
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+
+      if (response.statusCode == 401) {
+        await logout();
+        _errorMessage = 'Session expired. Please log in again.';
+        notifyListeners();
+        return false;
+      }
+
+      try {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        _errorMessage = data['message']?.toString() ?? 'Profile update failed.';
+      } catch (_) {
+        _errorMessage = 'Profile update failed. Status: ${response.statusCode}';
+      }
+
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _errorMessage = 'Profile update failed: $e';
       _isLoading = false;
       notifyListeners();
       return false;
@@ -201,8 +322,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    _currentUser = null;
-    await _saveCurrentUser();
+    await _clearSession();
     notifyListeners();
   }
 

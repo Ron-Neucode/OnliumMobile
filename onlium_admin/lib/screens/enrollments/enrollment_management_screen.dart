@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../models/enrollment_request.dart';
-import '../../models/shared.dart';
-import '../../providers/admin_auth_provider.dart';
+
 import '../../providers/enrollment_management_provider.dart';
 
 class EnrollmentManagementScreen extends StatefulWidget {
@@ -17,10 +15,18 @@ class _EnrollmentManagementScreenState extends State<EnrollmentManagementScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
+  static const String _pendingStatus = 'PendingReview';
+  static const String _approvedStatus = 'Approved';
+  static const String _rejectedStatus = 'Rejected';
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<EnrollmentManagementProvider>().fetchPendingEnrollments();
+    });
   }
 
   @override
@@ -31,35 +37,74 @@ class _EnrollmentManagementScreenState extends State<EnrollmentManagementScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: const Text('Enrollment Management'),
-        backgroundColor: Colors.blue[700],
-        foregroundColor: Colors.white,
-        elevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          tabs: const [
-            Tab(icon: Icon(Icons.hourglass_empty), text: 'Pending'),
-            Tab(icon: Icon(Icons.check_circle), text: 'Approved'),
-            Tab(icon: Icon(Icons.cancel), text: 'Rejected'),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildEnrollmentList(EnrollmentStatus.pending),
-          _buildEnrollmentList(EnrollmentStatus.approved),
-          _buildEnrollmentList(EnrollmentStatus.rejected),
-        ],
-      ),
+    return Consumer<EnrollmentManagementProvider>(
+      builder: (context, provider, child) {
+        return Scaffold(
+          backgroundColor: Colors.grey[50],
+          appBar: AppBar(
+            title: const Text('Enrollment Management'),
+            backgroundColor: Colors.blue[700],
+            foregroundColor: Colors.white,
+            elevation: 0,
+            actions: [
+              IconButton(
+                onPressed: provider.isLoading
+                    ? null
+                    : () => provider.fetchPendingEnrollments(),
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+            bottom: TabBar(
+              controller: _tabController,
+              indicatorColor: Colors.white,
+              tabs: [
+                Tab(
+                  icon: const Icon(Icons.hourglass_empty),
+                  text: 'Pending (${provider.pendingCount})',
+                ),
+                Tab(
+                  icon: const Icon(Icons.check_circle),
+                  text: 'Approved (${provider.approvedCount})',
+                ),
+                Tab(
+                  icon: const Icon(Icons.cancel),
+                  text: 'Rejected (${provider.rejectedCount})',
+                ),
+              ],
+            ),
+          ),
+          body: Column(
+            children: [
+              if (provider.errorMessage != null)
+                Container(
+                  width: double.infinity,
+                  color: Colors.red[50],
+                  padding: const EdgeInsets.all(12),
+                  child: Text(
+                    provider.errorMessage!,
+                    style: TextStyle(color: Colors.red[800]),
+                  ),
+                ),
+              Expanded(
+                child: provider.isLoading && provider.pendingEnrollments.isEmpty
+                    ? const Center(child: CircularProgressIndicator())
+                    : TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildEnrollmentList(_pendingStatus),
+                          _buildEnrollmentList(_approvedStatus),
+                          _buildEnrollmentList(_rejectedStatus),
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildEnrollmentList(EnrollmentStatus status) {
+  Widget _buildEnrollmentList(String status) {
     return Consumer<EnrollmentManagementProvider>(
       builder: (context, provider, child) {
         final enrollments = provider.getEnrollmentsByStatus(status);
@@ -72,7 +117,7 @@ class _EnrollmentManagementScreenState extends State<EnrollmentManagementScreen>
                 Icon(Icons.inbox, size: 64, color: Colors.grey[400]),
                 const SizedBox(height: 16),
                 Text(
-                  'No ${status.toString().split('.')[1]} enrollments',
+                  'No ${_displayStatus(status).toLowerCase()} enrollments',
                   style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                 ),
               ],
@@ -84,7 +129,7 @@ class _EnrollmentManagementScreenState extends State<EnrollmentManagementScreen>
           padding: const EdgeInsets.all(8),
           itemCount: enrollments.length,
           itemBuilder: (context, index) {
-            return _buildEnrollmentCard(enrollments[index], context, status);
+            return _buildEnrollmentCard(enrollments[index], status);
           },
         );
       },
@@ -92,10 +137,18 @@ class _EnrollmentManagementScreenState extends State<EnrollmentManagementScreen>
   }
 
   Widget _buildEnrollmentCard(
-    EnrollmentRequest enrollment,
-    BuildContext context,
-    EnrollmentStatus currentStatus,
+    Map<String, dynamic> enrollment,
+    String currentStatus,
   ) {
+    final firstName = enrollment['firstName']?.toString() ?? '';
+    final lastName = enrollment['lastName']?.toString() ?? '';
+    final fullName = '$firstName $lastName'.trim().isEmpty
+        ? 'Unnamed Student'
+        : '$firstName $lastName'.trim();
+
+    final studentType = enrollment['studentType']?.toString() ?? '-';
+    final programCode = enrollment['programCode']?.toString() ?? '-';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -103,7 +156,7 @@ class _EnrollmentManagementScreenState extends State<EnrollmentManagementScreen>
         borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.1),
+            color: Colors.grey.withOpacity(0.10),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -111,48 +164,107 @@ class _EnrollmentManagementScreenState extends State<EnrollmentManagementScreen>
       ),
       child: ExpansionTile(
         title: Text(
-          enrollment.studentName,
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+          fullName,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
         ),
         subtitle: Text(
-          enrollment.program,
-          style: TextStyle(fontSize: 12),
+          '$programCode • ${_getStudentTypeDisplay(studentType)}',
+          style: const TextStyle(fontSize: 12),
         ),
-        trailing: _getStatusBadge(enrollment.status),
+        trailing: _getStatusBadge(
+          enrollment['status']?.toString() ?? currentStatus,
+        ),
         children: [
           Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildDetailRow('Email', enrollment.studentEmail),
                 _buildDetailRow(
-                  'Student Type',
-                  _getStudentTypeDisplay(enrollment.studentType),
+                    'Student Type', _getStudentTypeDisplay(studentType)),
+                _buildDetailRow('Program', programCode),
+                _buildDetailRow(
+                  'Year Level',
+                  enrollment['yearLevel']?.toString() ?? '-',
                 ),
-                _buildDetailRow('Program', enrollment.program),
+                _buildDetailRow(
+                  'Semester',
+                  enrollment['semester']?.toString() ?? '-',
+                ),
+                _buildDetailRow(
+                  'Schedule',
+                  enrollment['preferredSchedule']?.toString() ?? '-',
+                ),
+                _buildDetailRow(
+                  'Phone Number',
+                  enrollment['phoneNumber']?.toString() ?? '-',
+                ),
+                _buildDetailRow(
+                  'Address',
+                  enrollment['address']?.toString() ?? '-',
+                ),
+                _buildDetailRow(
+                  'Birth Date',
+                  _formatDate(enrollment['birthDate']),
+                ),
                 _buildDetailRow(
                   'Submitted Date',
-                  enrollment.submittedAt.toString().split('.')[0],
+                  _formatDate(enrollment['submittedAt']),
                 ),
-                if (enrollment.reviewedAt != null)
-                  _buildDetailRow(
-                    'Reviewed Date',
-                    enrollment.reviewedAt.toString().split('.')[0],
-                  ),
-                if (enrollment.reviewNotes != null) ...[
+                if (enrollment['guardianFirstName'] != null ||
+                    enrollment['guardianLastName'] != null ||
+                    enrollment['guardianRelationship'] != null ||
+                    enrollment['guardianContactNumber'] != null ||
+                    enrollment['guardianAddress'] != null) ...[
                   const SizedBox(height: 12),
-                  _buildDetailRow('Review Notes', enrollment.reviewNotes ?? ''),
+                  const Text(
+                    'Guardian Information',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildDetailRow(
+                    'Guardian First Name',
+                    enrollment['guardianFirstName']?.toString() ?? '-',
+                  ),
+                  _buildDetailRow(
+                    'Guardian Last Name',
+                    enrollment['guardianLastName']?.toString() ?? '-',
+                  ),
+                  _buildDetailRow(
+                    'Relationship',
+                    enrollment['guardianRelationship']?.toString() ?? '-',
+                  ),
+                  _buildDetailRow(
+                    'Contact Number',
+                    enrollment['guardianContactNumber']?.toString() ?? '-',
+                  ),
+                  _buildDetailRow(
+                    'Guardian Address',
+                    enrollment['guardianAddress']?.toString() ?? '-',
+                  ),
                 ],
-                if (currentStatus == EnrollmentStatus.pending) ...[
+                if (enrollment['adminReviewComment'] != null &&
+                    enrollment['adminReviewComment']
+                        .toString()
+                        .trim()
+                        .isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _buildDetailRow(
+                    'Review Notes',
+                    enrollment['adminReviewComment'].toString(),
+                  ),
+                ],
+                if (currentStatus == _pendingStatus) ...[
                   const SizedBox(height: 16),
                   Row(
                     children: [
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () {
-                            _showApproveDialog(context, enrollment);
-                          },
+                          onPressed: () =>
+                              _showApproveDialog(context, enrollment),
                           icon: const Icon(Icons.check),
                           label: const Text('Approve'),
                           style: ElevatedButton.styleFrom(
@@ -164,9 +276,8 @@ class _EnrollmentManagementScreenState extends State<EnrollmentManagementScreen>
                       const SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () {
-                            _showRejectDialog(context, enrollment);
-                          },
+                          onPressed: () =>
+                              _showRejectDialog(context, enrollment),
                           icon: const Icon(Icons.close),
                           label: const Text('Reject'),
                           style: ElevatedButton.styleFrom(
@@ -193,7 +304,7 @@ class _EnrollmentManagementScreenState extends State<EnrollmentManagementScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 100,
+            width: 120,
             child: Text(
               '$label:',
               style: const TextStyle(
@@ -204,27 +315,30 @@ class _EnrollmentManagementScreenState extends State<EnrollmentManagementScreen>
             ),
           ),
           Expanded(
-            child: Text(value, style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+            child: Text(
+              value,
+              style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _getStatusBadge(EnrollmentStatus status) {
+  Widget _getStatusBadge(String status) {
     Color color;
     IconData icon;
 
     switch (status) {
-      case EnrollmentStatus.pending:
+      case _pendingStatus:
         color = Colors.orange;
         icon = Icons.hourglass_empty;
         break;
-      case EnrollmentStatus.approved:
+      case _approvedStatus:
         color = Colors.green;
         icon = Icons.check_circle;
         break;
-      case EnrollmentStatus.rejected:
+      case _rejectedStatus:
         color = Colors.red;
         icon = Icons.cancel;
         break;
@@ -235,59 +349,89 @@ class _EnrollmentManagementScreenState extends State<EnrollmentManagementScreen>
 
     return Chip(
       avatar: Icon(icon, size: 18, color: Colors.white),
-      label: Text(status.toString().split('.')[1]),
+      label: Text(_displayStatus(status)),
       backgroundColor: color,
       labelStyle: const TextStyle(color: Colors.white),
     );
   }
 
-  String _getStudentTypeDisplay(StudentType type) {
-    switch (type) {
-      case StudentType.newIncoming:
-        return 'New/Incoming';
-      case StudentType.transferee:
-        return 'Transferee';
-      case StudentType.continuing:
-        return 'Continuing';
+  String _displayStatus(String status) {
+    switch (status) {
+      case _pendingStatus:
+        return 'Pending';
+      case _approvedStatus:
+        return 'Approved';
+      case _rejectedStatus:
+        return 'Rejected';
+      default:
+        return status;
     }
   }
 
-  void _showApproveDialog(BuildContext context, EnrollmentRequest enrollment) {
-    final notesController = TextEditingController();
-    final authProvider = Provider.of<AdminAuthProvider>(context, listen: false);
+  String _getStudentTypeDisplay(String type) {
+    switch (type) {
+      case 'NewIncoming':
+        return 'New/Incoming';
+      case 'Transferee':
+        return 'Transferee';
+      case 'Continuing':
+        return 'Continuing';
+      default:
+        return type;
+    }
+  }
 
+  String _formatDate(dynamic value) {
+    if (value == null) return '-';
+
+    final raw = value.toString();
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) return raw;
+
+    return '${parsed.year.toString().padLeft(4, '0')}-'
+        '${parsed.month.toString().padLeft(2, '0')}-'
+        '${parsed.day.toString().padLeft(2, '0')} '
+        '${parsed.hour.toString().padLeft(2, '0')}:'
+        '${parsed.minute.toString().padLeft(2, '0')}';
+  }
+
+  void _showApproveDialog(
+    BuildContext context,
+    Map<String, dynamic> enrollment,
+  ) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Approve Enrollment'),
-        content: TextField(
-          controller: notesController,
-          decoration: const InputDecoration(
-            labelText: 'Approval Notes (Optional)',
-            border: OutlineInputBorder(),
-          ),
-          maxLines: 3,
+        content: const Text(
+          'Are you sure you want to approve this enrollment?',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              Provider.of<EnrollmentManagementProvider>(
-                context,
-                listen: false,
-              ).approveEnrollment(
-                enrollment.id,
-                authProvider.currentAdmin!.id,
-                notesController.text,
-              );
-              Navigator.pop(context);
+            onPressed: () async {
+              final success = await context
+                  .read<EnrollmentManagementProvider>()
+                  .approveEnrollment(enrollment['id'].toString());
+
+              if (!mounted) return;
+
+              Navigator.pop(dialogContext);
+
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Enrollment approved successfully!'),
-                  backgroundColor: Colors.green,
+                SnackBar(
+                  content: Text(
+                    success
+                        ? 'Enrollment approved successfully.'
+                        : (context
+                                .read<EnrollmentManagementProvider>()
+                                .errorMessage ??
+                            'Failed to approve enrollment.'),
+                  ),
+                  backgroundColor: success ? Colors.green : Colors.red,
                 ),
               );
             },
@@ -299,13 +443,15 @@ class _EnrollmentManagementScreenState extends State<EnrollmentManagementScreen>
     );
   }
 
-  void _showRejectDialog(BuildContext context, EnrollmentRequest enrollment) {
+  void _showRejectDialog(
+    BuildContext context,
+    Map<String, dynamic> enrollment,
+  ) {
     final reasonController = TextEditingController();
-    final authProvider = Provider.of<AdminAuthProvider>(context, listen: false);
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Reject Enrollment'),
         content: TextField(
           controller: reasonController,
@@ -317,12 +463,13 @@ class _EnrollmentManagementScreenState extends State<EnrollmentManagementScreen>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              if (reasonController.text.isEmpty) {
+            onPressed: () async {
+              final reason = reasonController.text.trim();
+              if (reason.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Please enter a reason'),
@@ -332,19 +479,25 @@ class _EnrollmentManagementScreenState extends State<EnrollmentManagementScreen>
                 return;
               }
 
-              Provider.of<EnrollmentManagementProvider>(
-                context,
-                listen: false,
-              ).rejectEnrollment(
-                enrollment.id,
-                authProvider.currentAdmin!.id,
-                reasonController.text,
-              );
-              Navigator.pop(context);
+              final success = await context
+                  .read<EnrollmentManagementProvider>()
+                  .rejectEnrollment(enrollment['id'].toString(), reason);
+
+              if (!mounted) return;
+
+              Navigator.pop(dialogContext);
+
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Enrollment rejected!'),
-                  backgroundColor: Colors.red,
+                SnackBar(
+                  content: Text(
+                    success
+                        ? 'Enrollment rejected successfully.'
+                        : (context
+                                .read<EnrollmentManagementProvider>()
+                                .errorMessage ??
+                            'Failed to reject enrollment.'),
+                  ),
+                  backgroundColor: success ? Colors.red : Colors.red,
                 ),
               );
             },

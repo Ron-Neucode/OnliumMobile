@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
+import 'providers/admin_applications_api_provider.dart';
 import 'providers/admin_auth_provider.dart';
+import 'providers/admin_resources_api_provider.dart';
 import 'providers/enrollment_management_provider.dart';
 import 'screens/auth/admin_login_screen.dart';
 import 'screens/dashboard/admin_dashboard.dart';
+import 'providers/admin_studyloads_api_provider.dart';
+import 'providers/admin_bulletins_api_provider.dart';
 
 void main() {
   runApp(const MyApp());
@@ -18,6 +23,10 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AdminAuthProvider()),
         ChangeNotifierProvider(create: (_) => EnrollmentManagementProvider()),
+        ChangeNotifierProvider(create: (_) => AdminApplicationsApiProvider()),
+        ChangeNotifierProvider(create: (_) => AdminResourcesApiProvider()),
+        ChangeNotifierProvider(create: (_) => AdminStudyLoadsApiProvider()),
+        ChangeNotifierProvider(create: (_) => AdminBulletinsApiProvider()),
       ],
       child: MaterialApp(
         title: 'Onlium Admin - Enrollment Management',

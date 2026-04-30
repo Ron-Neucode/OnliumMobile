@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/user.dart';
 import '../../providers/auth_provider.dart';
 import 'login_screen.dart';
 
@@ -57,16 +56,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     final authProvider = context.read<AuthProvider>();
 
-    final fullName =
-        '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}'
-            .replaceAll(RegExp(r'\s+'), ' ')
-            .trim();
-
     final success = await authProvider.register(
-      fullName,
       _emailController.text.trim(),
-      _passwordController.text,
-      StudentType.newIncoming,
+      _passwordController.text.trim(),
+      _firstNameController.text.trim(),
+      _lastNameController.text.trim(),
     );
 
     if (!mounted) return;
@@ -134,7 +128,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               child: Container(
                 width: 180,
                 height: 180,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [Color(0x40FFFFFF), Color(0x00FFFFFF)],

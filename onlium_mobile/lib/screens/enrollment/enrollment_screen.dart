@@ -1,23 +1,28 @@
-import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:image_picker/image_picker.dart';
-import '../../models/user.dart';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
+
 import '../../models/enrollment.dart';
+import '../../providers/auth_provider.dart';
+import 'continuing_enrollment.dart';
 import 'new_incoming_enrollment.dart';
 import 'transferee_enrollment.dart';
-import 'continuing_enrollment.dart';
+
+enum EnrollmentStudentType { newIncoming, transferee, continuing }
 
 class EnrollmentScreen extends StatefulWidget {
-  EnrollmentScreen({super.key});
+  const EnrollmentScreen({super.key});
 
   @override
   State<EnrollmentScreen> createState() => _EnrollmentScreenState();
 }
 
 class _EnrollmentScreenState extends State<EnrollmentScreen> {
-  StudentType? _selectedStudentType;
+  EnrollmentStudentType? _selectedStudentType;
 
   @override
   Widget build(BuildContext context) {
@@ -38,9 +43,19 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
           backgroundColor: Colors.transparent,
           appBar: AppBar(
             title: Text(title),
-            backgroundColor: Colors.blue[700],
+            backgroundColor: Colors.blue,
             foregroundColor: Colors.white,
             elevation: 0,
+            leading: _selectedStudentType == null
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () {
+                      setState(() {
+                        _selectedStudentType = null;
+                      });
+                    },
+                  ),
           ),
           body: _selectedStudentType == null
               ? _buildTypeSelection()
@@ -52,7 +67,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
 
   Widget _buildTypeSelection() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -66,21 +81,21 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
           ),
           const SizedBox(height: 20),
           _buildTypeCard(
-            StudentType.newIncoming,
+            EnrollmentStudentType.newIncoming,
             'New/Incoming Student',
             'For first-time enrollees joining the program.',
             Icons.school,
           ),
           const SizedBox(height: 12),
           _buildTypeCard(
-            StudentType.transferee,
+            EnrollmentStudentType.transferee,
             'Transferee Student',
             'For students transferring from another school.',
             Icons.compare_arrows,
           ),
           const SizedBox(height: 12),
           _buildTypeCard(
-            StudentType.continuing,
+            EnrollmentStudentType.continuing,
             'Continuing Student',
             'For currently enrolled students continuing their program.',
             Icons.repeat,
@@ -91,7 +106,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
   }
 
   Widget _buildTypeCard(
-    StudentType type,
+    EnrollmentStudentType type,
     String title,
     String subtitle,
     IconData icon,
@@ -101,16 +116,18 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => setState(() {
-          _selectedStudentType = type;
-        }),
+        onTap: () {
+          setState(() {
+            _selectedStudentType = type;
+          });
+        },
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
               CircleAvatar(
                 radius: 26,
-                backgroundColor: Colors.blue[700],
+                backgroundColor: Colors.blue,
                 child: Icon(icon, color: Colors.white),
               ),
               const SizedBox(width: 16),
@@ -138,45 +155,36 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
   }
 
   Widget _buildEnrollmentForm() {
-    Widget enrollmentScreen;
-
     switch (_selectedStudentType!) {
-      case StudentType.newIncoming:
-        enrollmentScreen = const NewIncomingEnrollment();
-        break;
-      case StudentType.transferee:
-        enrollmentScreen = const TransfereeEnrollment();
-        break;
-      case StudentType.continuing:
-        enrollmentScreen = const ContinuingEnrollment();
-        break;
+      case EnrollmentStudentType.newIncoming:
+        return const NewIncomingEnrollment();
+      case EnrollmentStudentType.transferee:
+        return const TransfereeEnrollment();
+      case EnrollmentStudentType.continuing:
+        return const ContinuingEnrollment();
     }
-
-    return enrollmentScreen;
   }
 
-  String _getStudentTypeDisplay(StudentType type) {
+  String _getStudentTypeDisplay(EnrollmentStudentType type) {
     switch (type) {
-      case StudentType.newIncoming:
+      case EnrollmentStudentType.newIncoming:
         return 'New/Incoming';
-      case StudentType.transferee:
+      case EnrollmentStudentType.transferee:
         return 'Transferee';
-      case StudentType.continuing:
+      case EnrollmentStudentType.continuing:
         return 'Continuing';
     }
   }
 }
 
 class BaseEnrollmentScreen extends StatefulWidget {
-  final StudentType studentType;
+  final EnrollmentStudentType studentType;
   final List<String> requiredDocuments;
-  final Widget child;
 
   const BaseEnrollmentScreen({
     super.key,
     required this.studentType,
     required this.requiredDocuments,
-    required this.child,
   });
 
   @override
@@ -184,21 +192,35 @@ class BaseEnrollmentScreen extends StatefulWidget {
 }
 
 class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
+  static const String _baseUrl = 'https://localhost:7164';
+  // For Android emulator, you may need:
+  // static const String _baseUrl = 'http://10.0.2.2:5027';
+  // For Windows desktop, you may use:
+  // static const String _baseUrl = 'http://localhost:5027';
+
   final _formKey = GlobalKey<FormState>();
+
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _phoneNumberController = TextEditingController();
   final _addressController = TextEditingController();
+
   final _guardianFirstNameController = TextEditingController();
   final _guardianLastNameController = TextEditingController();
   final _guardianContactController = TextEditingController();
   final _guardianAddressController = TextEditingController();
+
   String? _guardianRelationship;
+  String? _selectedGender;
   DateTime? _birthDate;
   String? _selectedProgram;
   Schedule _preferredSchedule = Schedule.morning;
-  String? _profilePicturePath;
-  Map<String, String> _uploadedFiles = {};
+
+  Uint8List? _profilePictureBytes;
+  String? _profilePictureName;
+
+  final Map<String, PlatformFile> _uploadedFiles = {};
+
   bool _isLoading = false;
 
   final List<String> _availablePrograms = [
@@ -222,14 +244,70 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
     super.dispose();
   }
 
+  String _toApiStudentType(EnrollmentStudentType type) {
+    switch (type) {
+      case EnrollmentStudentType.newIncoming:
+        return 'NewIncoming';
+      case EnrollmentStudentType.transferee:
+        return 'Transferee';
+      case EnrollmentStudentType.continuing:
+        return 'Continuing';
+    }
+  }
+
+  String _scheduleToApi(Schedule schedule) {
+    switch (schedule) {
+      case Schedule.morning:
+        return 'Morning';
+      case Schedule.afternoon:
+        return 'Afternoon';
+      case Schedule.evening:
+        return 'Evening';
+    }
+  }
+
+  String _programToCode(String program) {
+    if (program.contains('(BSIT)')) return 'BSIT';
+    if (program.contains('(BSCS)')) return 'BSCS';
+    if (program.contains('(BSBA)')) return 'BSBA';
+    if (program.contains('(BSA)')) return 'BSA';
+    if (program.contains('(BSHM)')) return 'BSHM';
+    return program;
+  }
+
+  String _documentToApiRequirementType(String document) {
+    switch (document) {
+      case 'Report Card':
+        return 'ReportCard';
+      case 'Good Moral Certificate':
+        return 'GoodMoral';
+      case 'PSA Birth Certificate':
+        return 'PSA';
+      case 'Transcript of Records (TOR)':
+        return 'TOR';
+      case 'Honorable Dismissal':
+        return 'HonorableDismissal';
+      case 'Clearance':
+        return 'Clearance';
+      default:
+        return document.replaceAll(' ', '');
+    }
+  }
+
+  bool _requiresGuardianInfo() {
+    return widget.studentType == EnrollmentStudentType.newIncoming ||
+        widget.studentType == EnrollmentStudentType.transferee;
+  }
+
   Future<void> _selectBirthDate() async {
-    final DateTime? picked = await showDatePicker(
+    final picked = await showDatePicker(
       context: context,
       initialDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
       firstDate: DateTime.now().subtract(const Duration(days: 365 * 100)),
       lastDate: DateTime.now().subtract(const Duration(days: 365 * 15)),
     );
-    if (picked != null && picked != _birthDate) {
+
+    if (picked != null) {
       setState(() {
         _birthDate = picked;
       });
@@ -237,101 +315,258 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
   }
 
   Future<void> _pickProfilePicture() async {
-    final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['jpg', 'jpeg', 'png'],
+      withData: true,
+    );
+
+    if (result != null && result.files.single.bytes != null) {
       setState(() {
-        _profilePicturePath = image.path;
+        _profilePictureBytes = result.files.single.bytes!;
+        _profilePictureName = result.files.single.name;
       });
     }
   }
 
   Future<void> _uploadFile(String documentType) async {
-    FilePickerResult? result = await FilePicker.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
+      withData: true,
     );
 
     if (result != null) {
-      setState(() {
-        _uploadedFiles[documentType] = result.files.single.path!;
-      });
+      final file = result.files.single;
+      if (file.bytes != null) {
+        setState(() {
+          _uploadedFiles[documentType] = file;
+        });
+      }
+    }
+  }
+
+  Future<void> _uploadRequirementFile({
+    required String token,
+    required String applicationId,
+    required String requirementType,
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$_baseUrl/api/Requirements/upload/$applicationId'),
+    );
+
+    request.headers['Authorization'] = 'Bearer $token';
+    request.fields['requirementType'] = requirementType;
+    request.files.add(
+      http.MultipartFile.fromBytes('file', bytes, filename: fileName),
+    );
+
+    final streamedResponse = await request.send();
+    final responseBody = await streamedResponse.stream.bytesToString();
+
+    if (streamedResponse.statusCode != 200 &&
+        streamedResponse.statusCode != 201) {
+      throw Exception(
+        'Upload failed for $requirementType. '
+        'Status: ${streamedResponse.statusCode}\n$responseBody',
+      );
     }
   }
 
   Future<void> _submitEnrollment() async {
-    if (_formKey.currentState!.validate()) {
-      if (_birthDate == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please select your birth date'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
+    if (!_formKey.currentState!.validate()) return;
 
-      if (_selectedProgram == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please select a program'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
+    if (_birthDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select your birth date'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
-      if (_profilePicturePath == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please upload your profile picture'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
+    if (_selectedProgram == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a program'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
-      // Check if all required documents are uploaded
-      bool allDocumentsUploaded = widget.requiredDocuments.every(
-        (doc) => _uploadedFiles.containsKey(doc),
+    if (_selectedGender == null || _selectedGender!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select your gender'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (_profilePictureBytes == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please upload your profile picture'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final allDocumentsUploaded = widget.requiredDocuments.every(
+      (doc) => _uploadedFiles.containsKey(doc),
+    );
+
+    if (!allDocumentsUploaded) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please upload all required documents'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (_requiresGuardianInfo() &&
+        (_guardianFirstNameController.text.trim().isEmpty ||
+            _guardianLastNameController.text.trim().isEmpty ||
+            _guardianContactController.text.trim().isEmpty ||
+            _guardianAddressController.text.trim().isEmpty ||
+            _guardianRelationship == null ||
+            _guardianRelationship!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fill in all guardian information'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final token = authProvider.token;
+
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You are not logged in. Please log in again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final createResponse = await http.post(
+        Uri.parse('$_baseUrl/api/Applications'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': '*/*',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'studentType': _toApiStudentType(widget.studentType),
+          'programCode': _programToCode(_selectedProgram!),
+          'yearLevel': 1,
+          'semester': 1,
+          'preferredSchedule': _scheduleToApi(_preferredSchedule),
+          'firstName': _firstNameController.text.trim(),
+          'lastName': _lastNameController.text.trim(),
+          'phoneNumber': _phoneNumberController.text.trim(),
+          'address': _addressController.text.trim(),
+          'birthDate': _birthDate!.toIso8601String(),
+          'gender': _selectedGender,
+          'guardianFirstName': _requiresGuardianInfo()
+              ? _guardianFirstNameController.text.trim()
+              : null,
+          'guardianLastName': _requiresGuardianInfo()
+              ? _guardianLastNameController.text.trim()
+              : null,
+          'guardianRelationship': _requiresGuardianInfo()
+              ? _guardianRelationship
+              : null,
+          'guardianContactNumber': _requiresGuardianInfo()
+              ? _guardianContactController.text.trim()
+              : null,
+          'guardianAddress': _requiresGuardianInfo()
+              ? _guardianAddressController.text.trim()
+              : null,
+        }),
       );
 
-      if (!allDocumentsUploaded) {
+      if (createResponse.statusCode == 401) {
+        await authProvider.logout();
+
+        if (!mounted) return;
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Please upload all required documents'),
+            content: Text('Session expired. Please log in again.'),
             backgroundColor: Colors.red,
           ),
         );
         return;
       }
 
-      if (widget.studentType == StudentType.newIncoming &&
-          (_guardianFirstNameController.text.trim().isEmpty ||
-              _guardianLastNameController.text.trim().isEmpty ||
-              _guardianContactController.text.trim().isEmpty ||
-              _guardianAddressController.text.trim().isEmpty ||
-              _guardianRelationship == null ||
-              _guardianRelationship!.isEmpty)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please fill in all guardian information'),
-            backgroundColor: Colors.red,
-          ),
+      if (createResponse.statusCode != 200 &&
+          createResponse.statusCode != 201) {
+        throw Exception(
+          'Create application failed. Status: ${createResponse.statusCode}\n${createResponse.body}',
         );
-        return;
       }
 
-      setState(() {
-        _isLoading = true;
-      });
+      final createdData =
+          jsonDecode(createResponse.body) as Map<String, dynamic>;
+      final applicationId = createdData['id']?.toString();
 
-      // Simulate API call
-      await Future.delayed(const Duration(seconds: 2));
+      if (applicationId == null || applicationId.isEmpty) {
+        throw Exception('Application ID was not returned by the API.');
+      }
 
-      setState(() {
-        _isLoading = false;
-      });
+      await _uploadRequirementFile(
+        token: token,
+        applicationId: applicationId,
+        requirementType: 'Picture',
+        bytes: _profilePictureBytes!,
+        fileName: _profilePictureName ?? 'picture.jpg',
+      );
+
+      for (final doc in widget.requiredDocuments) {
+        final file = _uploadedFiles[doc];
+        if (file == null || file.bytes == null) continue;
+
+        await _uploadRequirementFile(
+          token: token,
+          applicationId: applicationId,
+          requirementType: _documentToApiRequirementType(doc),
+          bytes: file.bytes!,
+          fileName: file.name,
+        );
+      }
+
+      final submitResponse = await http.post(
+        Uri.parse('$_baseUrl/api/Applications/$applicationId/submit'),
+        headers: {'Accept': '*/*', 'Authorization': 'Bearer $token'},
+      );
+
+      if (submitResponse.statusCode != 200 &&
+          submitResponse.statusCode != 204) {
+        throw Exception(
+          'Submit application failed. Status: ${submitResponse.statusCode}\n${submitResponse.body}',
+        );
+      }
+
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -343,51 +578,55 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
       );
 
       Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Enrollment failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(16),
       child: Form(
         key: _formKey,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Personal Information Section
             _buildSectionTitle('Personal Information'),
             const SizedBox(height: 16),
             _buildPersonalInfoSection(),
             const SizedBox(height: 24),
-
-            // Guardian Information Section (only for new incoming students)
-            if (widget.studentType == StudentType.newIncoming) ...[
+            if (_requiresGuardianInfo()) ...[
               _buildSectionTitle('Guardian Information'),
               const SizedBox(height: 16),
               _buildGuardianSection(),
               const SizedBox(height: 24),
             ],
-
-            // Program Selection Section
             _buildSectionTitle('Program Selection'),
             const SizedBox(height: 16),
             _buildProgramSection(),
             const SizedBox(height: 24),
-
-            // Photo Section
             _buildSectionTitle('1x1 / 2x2 Picture'),
             const SizedBox(height: 16),
             _buildProfilePictureSection(),
             const SizedBox(height: 24),
-
-            // Required Documents Section
             _buildSectionTitle('Required Documents'),
             const SizedBox(height: 16),
             _buildDocumentsSection(),
             const SizedBox(height: 32),
-
-            // Submit Button
             _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : SizedBox(
@@ -395,7 +634,7 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
                     child: ElevatedButton(
                       onPressed: _submitEnrollment,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue[700],
+                        backgroundColor: Colors.blue,
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
@@ -450,12 +689,9 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
                 child: TextFormField(
                   controller: _firstNameController,
                   decoration: _buildInputDecoration('First Name', Icons.person),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your first name';
-                    }
-                    return null;
-                  },
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Please enter your first name'
+                      : null,
                 ),
               ),
               const SizedBox(width: 12),
@@ -463,12 +699,9 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
                 child: TextFormField(
                   controller: _lastNameController,
                   decoration: _buildInputDecoration('Last Name', Icons.person),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your last name';
-                    }
-                    return null;
-                  },
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Please enter your last name'
+                      : null,
                 ),
               ),
             ],
@@ -478,24 +711,34 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
             controller: _phoneNumberController,
             keyboardType: TextInputType.phone,
             decoration: _buildInputDecoration('Phone Number', Icons.phone),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Please enter your phone number';
-              }
-              return null;
-            },
+            validator: (value) => value == null || value.isEmpty
+                ? 'Please enter your phone number'
+                : null,
           ),
           const SizedBox(height: 16),
           TextFormField(
             controller: _addressController,
-            maxLines: 1,
             decoration: _buildInputDecoration('Address', Icons.home),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Please enter your address';
-              }
-              return null;
+            validator: (value) => value == null || value.isEmpty
+                ? 'Please enter your address'
+                : null,
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<String>(
+            value: _selectedGender,
+            decoration: _buildInputDecoration('Gender', Icons.person_outline),
+            items: const [
+              DropdownMenuItem(value: 'Male', child: Text('Male')),
+              DropdownMenuItem(value: 'Female', child: Text('Female')),
+            ],
+            onChanged: (value) {
+              setState(() {
+                _selectedGender = value;
+              });
             },
+            validator: (value) => value == null || value.isEmpty
+                ? 'Please select your gender'
+                : null,
           ),
           const SizedBox(height: 16),
           InkWell(
@@ -504,7 +747,7 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey[300]!),
+                border: Border.all(color: Colors.grey.shade300),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
@@ -556,7 +799,7 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
                     Icons.person_outline,
                   ),
                   validator: (value) {
-                    if (widget.studentType == StudentType.newIncoming &&
+                    if (_requiresGuardianInfo() &&
                         (value == null || value.isEmpty)) {
                       return 'Please enter guardian first name';
                     }
@@ -573,7 +816,7 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
                     Icons.person_outline,
                   ),
                   validator: (value) {
-                    if (widget.studentType == StudentType.newIncoming &&
+                    if (_requiresGuardianInfo() &&
                         (value == null || value.isEmpty)) {
                       return 'Please enter guardian last name';
                     }
@@ -606,14 +849,13 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
               ),
               DropdownMenuItem(value: 'Other', child: Text('Other')),
             ],
-            onChanged: (String? value) {
+            onChanged: (value) {
               setState(() {
                 _guardianRelationship = value;
               });
             },
             validator: (value) {
-              if (widget.studentType == StudentType.newIncoming &&
-                  (value == null || value.isEmpty)) {
+              if (_requiresGuardianInfo() && (value == null || value.isEmpty)) {
                 return 'Please select relationship to student';
               }
               return null;
@@ -628,8 +870,7 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
               Icons.phone,
             ),
             validator: (value) {
-              if (widget.studentType == StudentType.newIncoming &&
-                  (value == null || value.isEmpty)) {
+              if (_requiresGuardianInfo() && (value == null || value.isEmpty)) {
                 return 'Please enter guardian contact number';
               }
               return null;
@@ -638,11 +879,9 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
           const SizedBox(height: 16),
           TextFormField(
             controller: _guardianAddressController,
-            maxLines: 1,
             decoration: _buildInputDecoration('Guardian Address', Icons.home),
             validator: (value) {
-              if (widget.studentType == StudentType.newIncoming &&
-                  (value == null || value.isEmpty)) {
+              if (_requiresGuardianInfo() && (value == null || value.isEmpty)) {
                 return 'Please enter guardian address';
               }
               return null;
@@ -672,23 +911,20 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
           DropdownButtonFormField<String>(
             value: _selectedProgram,
             decoration: _buildInputDecoration('Select Program', Icons.school),
-            items: _availablePrograms.map((String program) {
+            items: _availablePrograms.map((program) {
               return DropdownMenuItem<String>(
                 value: program,
                 child: Text(program),
               );
             }).toList(),
-            onChanged: (String? value) {
+            onChanged: (value) {
               setState(() {
                 _selectedProgram = value;
               });
             },
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Please select a program';
-              }
-              return null;
-            },
+            validator: (value) => value == null || value.isEmpty
+                ? 'Please select a program'
+                : null,
           ),
           const SizedBox(height: 16),
           DropdownButtonFormField<Schedule>(
@@ -697,13 +933,13 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
               'Preferred Schedule',
               Icons.schedule,
             ),
-            items: Schedule.values.map((Schedule schedule) {
+            items: Schedule.values.map((schedule) {
               return DropdownMenuItem<Schedule>(
                 value: schedule,
                 child: Text(_getScheduleDisplay(schedule)),
               );
             }).toList(),
-            onChanged: (Schedule? value) {
+            onChanged: (value) {
               setState(() {
                 _preferredSchedule = value!;
               });
@@ -730,14 +966,14 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
       ),
       child: Column(
         children: [
-          if (_profilePicturePath != null)
+          if (_profilePictureBytes != null)
             Container(
               width: 120,
               height: 120,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
                 image: DecorationImage(
-                  image: FileImage(File(_profilePicturePath!)),
+                  image: MemoryImage(_profilePictureBytes!),
                   fit: BoxFit.cover,
                 ),
               ),
@@ -749,7 +985,7 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
               decoration: BoxDecoration(
                 color: Colors.grey[200],
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey[300]!),
+                border: Border.all(color: Colors.grey.shade300),
               ),
               child: const Icon(Icons.photo, size: 60, color: Colors.grey),
             ),
@@ -759,7 +995,7 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
             icon: const Icon(Icons.camera_alt),
             label: const Text('Upload 1x1 / 2x2 Picture'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue[700],
+              backgroundColor: Colors.blue,
               foregroundColor: Colors.white,
             ),
           ),
@@ -790,45 +1026,37 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
       ),
       child: Column(
         children: widget.requiredDocuments.map((document) {
+          final uploaded = _uploadedFiles.containsKey(document);
+
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey[300]!),
+                border: Border.all(color: Colors.grey.shade300),
                 borderRadius: BorderRadius.circular(8),
-                color: _uploadedFiles.containsKey(document)
-                    ? Colors.green[50]
-                    : Colors.white,
+                color: uploaded ? Colors.green[50] : Colors.white,
               ),
               child: Row(
                 children: [
                   Icon(
-                    _uploadedFiles.containsKey(document)
-                        ? Icons.check_circle
-                        : Icons.upload_file,
-                    color: _uploadedFiles.containsKey(document)
-                        ? Colors.green
-                        : Colors.grey[600],
+                    uploaded ? Icons.check_circle : Icons.upload_file,
+                    color: uploaded ? Colors.green : Colors.grey[600],
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      _uploadedFiles.containsKey(document)
-                          ? '$document - Uploaded'
-                          : document,
+                      uploaded ? '$document - Uploaded' : document,
                       style: TextStyle(
-                        color: _uploadedFiles.containsKey(document)
-                            ? Colors.green[700]
-                            : Colors.black87,
-                        fontWeight: _uploadedFiles.containsKey(document)
+                        color: uploaded ? Colors.green[700] : Colors.black87,
+                        fontWeight: uploaded
                             ? FontWeight.w600
                             : FontWeight.normal,
                       ),
                     ),
                   ),
-                  if (!_uploadedFiles.containsKey(document))
+                  if (!uploaded)
                     ElevatedButton(
                       onPressed: () => _uploadFile(document),
                       child: const Text('Upload'),

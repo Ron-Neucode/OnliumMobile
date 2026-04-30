@@ -1,0 +1,6 @@
+@Onlium.API_HostAddress = http://localhost:5027
+
+GET {{Onlium.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

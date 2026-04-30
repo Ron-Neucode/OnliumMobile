@@ -1,8 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
+
 import '../../providers/auth_provider.dart';
-import '../../providers/enrollment_provider.dart';
-import '../../models/enrollment.dart';
 
 class StudyLoadScreen extends StatefulWidget {
   const StudyLoadScreen({super.key});
@@ -12,337 +14,125 @@ class StudyLoadScreen extends StatefulWidget {
 }
 
 class _StudyLoadScreenState extends State<StudyLoadScreen> {
-  bool _isEnrolled = false;
-  String _selectedYear = 'First Year';
-  List<Subject> _subjects = [];
+  static const String _baseUrl = 'https://localhost:7164';
 
-  final List<String> _years = [
-    'First Year',
-    'Second Year',
-    'Third Year',
-    'Fourth Year',
+  final List<String> _programs = ['BSIT', 'BSCS', 'BSBA', 'BSA', 'BSHM'];
+
+  final List<Map<String, dynamic>> _yearLevels = [
+    {'label': '1st Year', 'value': 1},
+    {'label': '2nd Year', 'value': 2},
+    {'label': '3rd Year', 'value': 3},
+    {'label': '4th Year', 'value': 4},
   ];
 
-  final Map<String, List<Subject>> _subjectsByYear = {
-    'First Year': [
-      Subject(
-        code: 'MATH101',
-        name: 'College Algebra',
-        schedule: 'MWF 8:00-9:00 AM',
-        instructor: 'Dr. Smith',
-        units: 3,
-      ),
-      Subject(
-        code: 'ENG101',
-        name: 'English Communication',
-        schedule: 'TTH 10:00-11:30 AM',
-        instructor: 'Prof. Johnson',
-        units: 3,
-      ),
-      Subject(
-        code: 'CS101',
-        name: 'Introduction to Computer Science',
-        schedule: 'MWF 1:00-2:00 PM',
-        instructor: 'Engr. Davis',
-        units: 3,
-      ),
-      Subject(
-        code: 'PE101',
-        name: 'Physical Education',
-        schedule: 'TTH 2:00-3:30 PM',
-        instructor: 'Coach Wilson',
-        units: 2,
-      ),
-    ],
-    'Second Year': [
-      Subject(
-        code: 'MATH201',
-        name: 'Calculus I',
-        schedule: 'MWF 9:00-10:00 AM',
-        instructor: 'Dr. Brown',
-        units: 4,
-      ),
-      Subject(
-        code: 'CS201',
-        name: 'Data Structures',
-        schedule: 'TTH 8:00-9:30 AM',
-        instructor: 'Prof. Miller',
-        units: 3,
-      ),
-      Subject(
-        code: 'ENG201',
-        name: 'Technical Writing',
-        schedule: 'MWF 2:00-3:00 PM',
-        instructor: 'Dr. Taylor',
-        units: 3,
-      ),
-      Subject(
-        code: 'PHYS201',
-        name: 'Physics I',
-        schedule: 'TTH 1:00-2:30 PM',
-        instructor: 'Prof. Anderson',
-        units: 3,
-      ),
-    ],
-    'Third Year': [
-      Subject(
-        code: 'CS301',
-        name: 'Database Systems',
-        schedule: 'MWF 10:00-11:00 AM',
-        instructor: 'Dr. Martinez',
-        units: 3,
-      ),
-      Subject(
-        code: 'CS302',
-        name: 'Software Engineering',
-        schedule: 'TTH 9:00-10:30 AM',
-        instructor: 'Prof. Garcia',
-        units: 3,
-      ),
-      Subject(
-        code: 'MATH301',
-        name: 'Discrete Mathematics',
-        schedule: 'MWF 1:00-2:00 PM',
-        instructor: 'Dr. Rodriguez',
-        units: 3,
-      ),
-      Subject(
-        code: 'NET301',
-        name: 'Computer Networks',
-        schedule: 'TTH 2:00-3:30 PM',
-        instructor: 'Engr. Lopez',
-        units: 3,
-      ),
-    ],
-    'Fourth Year': [
-      Subject(
-        code: 'CS401',
-        name: 'Machine Learning',
-        schedule: 'MWF 8:00-9:00 AM',
-        instructor: 'Dr. Chen',
-        units: 3,
-      ),
-      Subject(
-        code: 'CS402',
-        name: 'Web Development',
-        schedule: 'TTH 10:00-11:30 AM',
-        instructor: 'Prof. Kumar',
-        units: 3,
-      ),
-      Subject(
-        code: 'CS403',
-        name: 'Capstone Project',
-        schedule: 'MWF 2:00-4:00 PM',
-        instructor: 'Dr. Wilson',
-        units: 6,
-      ),
-      Subject(
-        code: 'ETH401',
-        name: 'Professional Ethics',
-        schedule: 'TTH 1:00-2:30 PM',
-        instructor: 'Prof. Thompson',
-        units: 2,
-      ),
-    ],
-  };
+  final List<Map<String, dynamic>> _semesters = [
+    {'label': '1st Semester', 'value': 1},
+    {'label': '2nd Semester', 'value': 2},
+    {'label': 'Summer', 'value': 3},
+  ];
+
+  String _selectedProgram = 'BSIT';
+  int _selectedYearLevel = 1;
+  int _selectedSemester = 1;
+
+  bool _isLoading = true;
+  String? _errorMessage;
+  List<Map<String, dynamic>> _subjects = [];
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkEnrollmentStatus();
-    });
+    _fetchStudyLoad();
   }
 
-  void _checkEnrollmentStatus() {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final enrollmentProvider = Provider.of<EnrollmentProvider>(
-      context,
-      listen: false,
-    );
-    final currentUser = authProvider.currentUser;
-
-    bool isEnrolled = false;
-    if (currentUser != null) {
-      final userEnrollments = enrollmentProvider.getEnrollmentsByUserId(
-        currentUser.id,
-      );
-      isEnrolled = userEnrollments.any(
-        (enrollment) => enrollment.status == EnrollmentStatus.approved,
-      );
-    }
-
+  Future<void> _fetchStudyLoad() async {
     setState(() {
-      _isEnrolled = isEnrolled;
-      _subjects = isEnrolled ? _subjectsByYear[_selectedYear] ?? [] : [];
+      _isLoading = true;
+      _errorMessage = null;
     });
-  }
 
-  void _loadSubjects() {
-    setState(() {
-      _subjects = _subjectsByYear[_selectedYear] ?? [];
-    });
-  }
+    try {
+      final authProvider = context.read<AuthProvider>();
+      final token = authProvider.token;
 
-  bool _hasScheduleConflict(Subject subject1, Subject subject2) {
-    // Simple schedule conflict detection
-    if (subject1.schedule == subject2.schedule) {
-      return true;
-    }
-
-    // Extract time ranges and check for overlaps
-    final time1 = _extractTimeRange(subject1.schedule);
-    final time2 = _extractTimeRange(subject2.schedule);
-
-    if (time1 != null && time2 != null) {
-      return _timeRangesOverlap(time1, time2);
-    }
-
-    return false;
-  }
-
-  Map<String, String>? _extractTimeRange(String schedule) {
-    // Extract time range from schedule string
-    // Example: "MWF 8:00-9:00 AM" -> {"start": "8:00 AM", "end": "9:00 AM"}
-    final regex = RegExp(r'(\d{1,2}:\d{2}\s[AP]M)-(\d{1,2}:\d{2}\s[AP]M)');
-    final match = regex.firstMatch(schedule);
-
-    if (match != null) {
-      return {'start': match.group(1)!, 'end': match.group(2)!};
-    }
-
-    return null;
-  }
-
-  bool _timeRangesOverlap(
-    Map<String, String> range1,
-    Map<String, String> range2,
-  ) {
-    // Simple time overlap check
-    // In a real app, this would be more sophisticated
-    return range1['start'] == range2['start'] || range1['end'] == range2['end'];
-  }
-
-  void _checkForConflicts() {
-    List<String> conflicts = [];
-
-    for (int i = 0; i < _subjects.length; i++) {
-      for (int j = i + 1; j < _subjects.length; j++) {
-        if (_hasScheduleConflict(_subjects[i], _subjects[j])) {
-          conflicts.add(
-            'Conflict: ${_subjects[i].code} and ${_subjects[j].code}',
-          );
-        }
+      if (token == null || token.isEmpty) {
+        setState(() {
+          _errorMessage = 'You are not logged in.';
+          _isLoading = false;
+        });
+        return;
       }
-    }
 
-    if (conflicts.isNotEmpty) {
-      _showConflictDialog(conflicts);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No schedule conflicts found!'),
-          backgroundColor: Colors.green,
-        ),
+      final uri = Uri.parse('$_baseUrl/api/StudyLoads').replace(
+        queryParameters: {
+          'programCode': _selectedProgram,
+          'yearLevel': _selectedYearLevel.toString(),
+          'semester': _selectedSemester.toString(),
+        },
       );
+
+      final response = await http.get(
+        uri,
+        headers: {'Accept': '*/*', 'Authorization': 'Bearer $token'},
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body) as List<dynamic>;
+
+        setState(() {
+          _subjects = decoded
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+          _isLoading = false;
+        });
+        return;
+      }
+
+      if (response.statusCode == 401) {
+        setState(() {
+          _errorMessage = 'Session expired. Please log in again.';
+          _isLoading = false;
+        });
+        return;
+      }
+
+      setState(() {
+        _errorMessage =
+            'Failed to load study load. Status: ${response.statusCode}';
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error loading study load: $e';
+        _isLoading = false;
+      });
     }
   }
 
-  void _showConflictDialog(List<String> conflicts) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Schedule Conflicts Found'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'The following schedule conflicts were detected:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            ...conflicts.map(
-              (conflict) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    Icon(Icons.warning, color: Colors.orange[600], size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(conflict)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Please consult with the admin to resolve these conflicts.',
-              style: TextStyle(color: Colors.red),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              _contactAdmin();
-            },
-            child: const Text('Contact Admin'),
-          ),
-        ],
-      ),
+  double _toDouble(dynamic value) {
+    if (value == null) return 0;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString()) ?? 0;
+  }
+
+  double get _grandTotalUnits {
+    return _subjects.fold<double>(
+      0,
+      (sum, item) => sum + _toDouble(item['totalUnits']),
     );
   }
 
-  void _contactAdmin() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Admin contact request sent!'),
-        backgroundColor: Colors.blue,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF3F7ED8), Color(0xFF8EC7FF), Color(0xFFD6ECFF)],
-          ),
-        ),
-        child: Scaffold(
-          backgroundColor: Colors.transparent,
-          appBar: AppBar(
-            title: const Text('Study Load'),
-            backgroundColor: Colors.blue[700],
-            foregroundColor: Colors.white,
-            elevation: 0,
-          ),
-          body: !_isEnrolled ? _buildNotEnrolledView() : _buildEnrolledView(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNotEnrolledView() {
+  Widget _buildNotSignedInView() {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.warning_amber, size: 80, color: Colors.orange[600]),
+            Icon(Icons.lock_outline, size: 80, color: Colors.orange[700]),
             const SizedBox(height: 20),
             Text(
-              'Not Enrolled',
+              'Sign In Required',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -351,25 +141,9 @@ class _StudyLoadScreenState extends State<StudyLoadScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              'You need to complete your enrollment first before viewing your study load.',
+              'Please sign in first before viewing your study load.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 30),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              icon: const Icon(Icons.app_registration),
-              label: const Text('Go to Enrollment'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue[700],
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-              ),
             ),
           ],
         ),
@@ -377,121 +151,231 @@ class _StudyLoadScreenState extends State<StudyLoadScreen> {
     );
   }
 
-  Widget _buildEnrolledView() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
+  Widget _buildStudentCard(AuthProvider authProvider) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.10),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Year Selection
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Select Year',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: _selectedYear,
-                  decoration: InputDecoration(
-                    labelText: 'Academic Year',
-                    prefixIcon: const Icon(Icons.school),
-                    border: const OutlineInputBorder(),
-                    filled: true,
-                    fillColor: Colors.grey[50],
-                  ),
-                  items: _years.map((String year) {
-                    return DropdownMenuItem<String>(
-                      value: year,
-                      child: Text(year),
-                    );
-                  }).toList(),
-                  onChanged: (String? value) {
-                    setState(() {
-                      _selectedYear = value!;
-                    });
-                    _loadSubjects();
-                  },
-                ),
-              ],
-            ),
+          Text(
+            'Student: ${authProvider.fullName ?? 'Unknown'}',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
-          const SizedBox(height: 20),
-
-          // Action Buttons
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _checkForConflicts,
-                  icon: const Icon(Icons.check_circle),
-                  label: const Text('Check Conflicts'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange[600],
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Study load viewed successfully!'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.visibility),
-                  label: const Text('View Load'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green[600],
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
-            ],
+          const SizedBox(height: 8),
+          Text(
+            'Email: ${authProvider.email ?? 'Not available'}',
+            style: const TextStyle(fontSize: 14),
           ),
-          const SizedBox(height: 20),
-
-          // Subjects List
-          const Text(
-            'Subjects',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
+          const SizedBox(height: 8),
+          Text(
+            'Program: $_selectedProgram',
+            style: const TextStyle(fontSize: 14),
           ),
-          const SizedBox(height: 16),
-          ..._subjects.map((subject) => _buildSubjectCard(subject)).toList(),
         ],
       ),
     );
   }
 
-  Widget _buildSubjectCard(Subject subject) {
+  Widget _buildFilterCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.10),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Filter Study Load',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            value: _selectedProgram,
+            decoration: InputDecoration(
+              labelText: 'Program',
+              prefixIcon: const Icon(Icons.school),
+              border: const OutlineInputBorder(),
+              filled: true,
+              fillColor: Colors.grey[50],
+            ),
+            items: _programs.map((program) {
+              return DropdownMenuItem<String>(
+                value: program,
+                child: Text(program),
+              );
+            }).toList(),
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() {
+                _selectedProgram = value;
+              });
+            },
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<int>(
+            value: _selectedYearLevel,
+            decoration: InputDecoration(
+              labelText: 'Year Level',
+              prefixIcon: const Icon(Icons.badge),
+              border: const OutlineInputBorder(),
+              filled: true,
+              fillColor: Colors.grey[50],
+            ),
+            items: _yearLevels.map((year) {
+              return DropdownMenuItem<int>(
+                value: year['value'] as int,
+                child: Text(year['label'] as String),
+              );
+            }).toList(),
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() {
+                _selectedYearLevel = value;
+              });
+            },
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<int>(
+            value: _selectedSemester,
+            decoration: InputDecoration(
+              labelText: 'Semester',
+              prefixIcon: const Icon(Icons.calendar_today),
+              border: const OutlineInputBorder(),
+              filled: true,
+              fillColor: Colors.grey[50],
+            ),
+            items: _semesters.map((semester) {
+              return DropdownMenuItem<int>(
+                value: semester['value'] as int,
+                child: Text(semester['label'] as String),
+              );
+            }).toList(),
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() {
+                _selectedSemester = value;
+              });
+            },
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _fetchStudyLoad,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Load Study Load'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue[700],
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.10),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildSummaryItem(
+              title: 'Subjects',
+              value: _subjects.length.toString(),
+              color: Colors.blue,
+              icon: Icons.menu_book,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _buildSummaryItem(
+              title: 'Total Units',
+              value: _grandTotalUnits.toStringAsFixed(2),
+              color: Colors.green,
+              icon: Icons.calculate,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryItem({
+    required String title,
+    required String value,
+    required Color color,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(title, style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildApiSubjectCard(Map<String, dynamic> subject) {
+    final subjectCode = subject['subjectCode']?.toString() ?? '-';
+    final subjectTitle = subject['subjectTitle']?.toString() ?? '-';
+    final lecUnits = _toDouble(subject['lecUnits']);
+    final labUnits = _toDouble(subject['labUnits']);
+    final totalUnits = _toDouble(subject['totalUnits']);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -500,7 +384,7 @@ class _StudyLoadScreenState extends State<StudyLoadScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.grey.withOpacity(0.10),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -525,15 +409,16 @@ class _StudyLoadScreenState extends State<StudyLoadScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      subject.code,
+                      subjectCode,
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                         color: Colors.blue,
                       ),
                     ),
+                    const SizedBox(height: 2),
                     Text(
-                      subject.name,
+                      subjectTitle,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -550,7 +435,7 @@ class _StudyLoadScreenState extends State<StudyLoadScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '${subject.units} units',
+                  '${totalUnits.toStringAsFixed(2)} units',
                   style: TextStyle(
                     color: Colors.green[700],
                     fontWeight: FontWeight.bold,
@@ -560,29 +445,143 @@ class _StudyLoadScreenState extends State<StudyLoadScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Row(
             children: [
-              Icon(Icons.schedule, size: 16, color: Colors.grey[600]),
-              const SizedBox(width: 4),
+              Icon(Icons.class_, size: 16, color: Colors.grey[600]),
+              const SizedBox(width: 6),
               Text(
-                subject.schedule,
+                'Lecture Units: ${lecUnits.toStringAsFixed(2)}',
                 style: TextStyle(color: Colors.grey[700], fontSize: 14),
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Row(
             children: [
-              Icon(Icons.person, size: 16, color: Colors.grey[600]),
-              const SizedBox(width: 4),
+              Icon(Icons.science, size: 16, color: Colors.grey[600]),
+              const SizedBox(width: 6),
               Text(
-                subject.instructor,
+                'Laboratory Units: ${labUnits.toStringAsFixed(2)}',
                 style: TextStyle(color: Colors.grey[700], fontSize: 14),
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSignedInView(AuthProvider authProvider) {
+    return RefreshIndicator(
+      onRefresh: _fetchStudyLoad,
+      child: ListView(
+        padding: const EdgeInsets.all(16.0),
+        children: [
+          _buildStudentCard(authProvider),
+          const SizedBox(height: 20),
+          _buildFilterCard(),
+          const SizedBox(height: 20),
+          _buildSummaryCard(),
+          const SizedBox(height: 20),
+          const Text(
+            'Subjects',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (_isLoading)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else if (_errorMessage != null)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.red[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Text(
+                _errorMessage!,
+                style: const TextStyle(color: Colors.red),
+              ),
+            )
+          else if (_subjects.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.orange[50],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: const Column(
+                children: [
+                  Icon(Icons.info_outline, size: 42, color: Colors.orange),
+                  SizedBox(height: 12),
+                  Text(
+                    'No study load available yet.',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Your study load has not been posted yet for the selected program, year level, and semester.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.orange),
+                  ),
+                ],
+              ),
+            )
+          else
+            ..._subjects.map(_buildApiSubjectCard),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final authProvider = context.watch<AuthProvider>();
+    final isSignedIn = authProvider.isAuthenticated;
+
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF3F7ED8), Color(0xFF8EC7FF), Color(0xFFD6ECFF)],
+          ),
+        ),
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            title: const Text('Study Load'),
+            backgroundColor: Colors.blue,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            actions: [
+              if (isSignedIn)
+                IconButton(
+                  onPressed: _fetchStudyLoad,
+                  icon: const Icon(Icons.refresh),
+                ),
+            ],
+          ),
+          body: !isSignedIn
+              ? _buildNotSignedInView()
+              : _buildSignedInView(authProvider),
+        ),
       ),
     );
   }

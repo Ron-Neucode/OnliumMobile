@@ -35,9 +35,13 @@ class _LoginScreenState extends State<LoginScreen> {
       labelText: label,
       prefixIcon: Icon(icon, color: const Color(0xFF1E4A8A)),
       suffixIcon: suffixIcon,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
       filled: true,
       fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
     );
   }
 
@@ -45,15 +49,25 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final authProvider = context.read<AuthProvider>();
+    authProvider.clearError();
 
     final success = await authProvider.login(
       _emailController.text.trim(),
-      _passwordController.text,
+      _passwordController.text.trim(),
     );
 
     if (!mounted) return;
 
     if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Welcome${authProvider.fullName != null && authProvider.fullName!.isNotEmpty ? ', ${authProvider.fullName}' : ''}!',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (context) => const DashboardScreen()),
       );
@@ -115,9 +129,9 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Container(
                 width: 220,
                 height: 420,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: const RadialGradient(
+                  gradient: RadialGradient(
                     colors: [Color(0x2EFFFFFF), Color(0x05FFFFFF)],
                   ),
                 ),
@@ -154,13 +168,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       },
                     ),
                     const SizedBox(height: 20),
-                    Text(
+                    const Text(
                       'Sign In',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 30,
                         fontWeight: FontWeight.bold,
-                        color: const Color.fromARGB(255, 255, 255, 255),
+                        color: Colors.white,
                       ),
                     ),
                     const SizedBox(height: 30),
@@ -227,40 +241,25 @@ class _LoginScreenState extends State<LoginScreen> {
                                 );
                               }
 
-                              return Container(
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Colors.white, Color(0xFFE3F2FD)],
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.3),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 4),
+                              return SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  onPressed: _login,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    foregroundColor: Colors.blue,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
                                     ),
-                                  ],
-                                ),
-                                child: Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    onTap: _login,
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: const Padding(
-                                      padding: EdgeInsets.symmetric(
-                                        vertical: 16,
-                                        horizontal: 24,
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          'Sign In',
-                                          style: TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.blue,
-                                          ),
-                                        ),
-                                      ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Sign In',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                 ),

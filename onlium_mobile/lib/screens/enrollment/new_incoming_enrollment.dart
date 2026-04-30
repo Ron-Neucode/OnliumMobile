@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:onlium_mobile/models/user.dart';
-import '../../models/enrollment.dart';
 import 'enrollment_screen.dart';
 
 class NewIncomingEnrollment extends StatelessWidget {
@@ -8,14 +6,13 @@ class NewIncomingEnrollment extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BaseEnrollmentScreen(
-      studentType: StudentType.newIncoming,
-      requiredDocuments: const [
+    return const BaseEnrollmentScreen(
+      studentType: EnrollmentStudentType.newIncoming,
+      requiredDocuments: [
         'Report Card',
         'Good Moral Certificate',
         'PSA Birth Certificate',
       ],
-      child: Container(), // The BaseEnrollmentScreen handles everything
     );
   }
 }
