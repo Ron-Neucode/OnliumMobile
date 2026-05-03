@@ -159,12 +159,7 @@ class _ResourceScreenState extends State<ResourceScreen> {
             backgroundColor: Colors.blue[700],
             foregroundColor: Colors.white,
             elevation: 0,
-            actions: [
-              IconButton(
-                onPressed: _loadResources,
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
+            automaticallyImplyLeading: false,
           ),
           body: RefreshIndicator(
             onRefresh: _loadResources,
@@ -172,8 +167,6 @@ class _ResourceScreenState extends State<ResourceScreen> {
               padding: const EdgeInsets.all(16.0),
               children: [
                 _buildLMSSection(),
-                const SizedBox(height: 24),
-                _buildQuickLinksSection(),
               ],
             ),
           ),
@@ -283,7 +276,7 @@ class _ResourceScreenState extends State<ResourceScreen> {
                     crossAxisCount: 2,
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
-                    childAspectRatio: 1.1,
+                    childAspectRatio: 0.85,
                   ),
                   itemCount: _examResources.length,
                   itemBuilder: (context, index) {
@@ -310,7 +303,7 @@ class _ResourceScreenState extends State<ResourceScreen> {
                     crossAxisCount: 2,
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
-                    childAspectRatio: 1.1,
+                    childAspectRatio: 0.85,
                   ),
                   itemCount: _quizResources.length,
                   itemBuilder: (context, index) {
@@ -378,91 +371,13 @@ class _ResourceScreenState extends State<ResourceScreen> {
                 description,
                 style: TextStyle(fontSize: 10, color: Colors.grey[600]),
                 textAlign: TextAlign.center,
-                maxLines: 2,
+                maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildQuickLinksSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Quick Links',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.blue[50],
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.blue[200]!),
-          ),
-          child: Column(
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.info, color: Colors.blue),
-                  SizedBox(width: 8),
-                  Text(
-                    'Need Help?',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Colors.blue,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'If you need assistance with any of these resources, please contact the IT support team or visit the student services office.',
-                style: TextStyle(color: Colors.blue),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () =>
-                          _launchURL('mailto:support@university.edu'),
-                      icon: const Icon(Icons.email),
-                      label: const Text('Email Support'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue[700],
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => _launchURL('tel:+1234567890'),
-                      icon: const Icon(Icons.phone),
-                      label: const Text('Call Support'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green[600],
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

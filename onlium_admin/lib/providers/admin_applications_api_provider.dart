@@ -9,7 +9,7 @@ class AdminApplicationsApiProvider extends ChangeNotifier {
   // Android emulator:
   // static const String _baseUrl = 'http://10.0.2.2:5027';
   // Windows desktop:
-  // static const String _baseUrl = 'http://localhost:5027';
+  // static const String _baseUrl = 'https://localhost:7164';
 
   final List<Map<String, dynamic>> _pendingEnrollments = [];
   final List<Map<String, dynamic>> _approvedEnrollments = [];

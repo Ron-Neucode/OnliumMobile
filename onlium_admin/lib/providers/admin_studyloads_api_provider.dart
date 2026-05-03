@@ -11,9 +11,18 @@ class AdminStudyLoadsApiProvider extends ChangeNotifier {
   String? _errorMessage;
   List<Map<String, dynamic>> _studyLoads = [];
 
+  // Filter persistence
+  String? _selectedProgram;
+  int? _selectedYear;
+  int? _selectedSemester;
+
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   List<Map<String, dynamic>> get studyLoads => _studyLoads;
+
+  String? get selectedProgram => _selectedProgram;
+  int? get selectedYear => _selectedYear;
+  int? get selectedSemester => _selectedSemester;
 
   Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -118,6 +127,11 @@ class AdminStudyLoadsApiProvider extends ChangeNotifier {
       _studyLoads =
           decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
 
+      // Store filter values
+      _selectedProgram = programCode;
+      _selectedYear = yearLevel;
+      _selectedSemester = semester;
+
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -187,6 +201,75 @@ class AdminStudyLoadsApiProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       _errorMessage = 'Error creating study load: $e';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> updateStudyLoad({
+    required int id,
+    required String programCode,
+    required int yearLevel,
+    required int semester,
+    required String subjectCode,
+    required String subjectTitle,
+    required double lecUnits,
+    required double labUnits,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final token = await _requireToken();
+      if (token == null) {
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      final response = await http.put(
+        Uri.parse('$_baseUrl/api/StudyLoads/$id'),
+        headers: _authHeaders(token, json: true),
+        body: jsonEncode({
+          'id': id,
+          'programCode': programCode.trim(),
+          'yearLevel': yearLevel,
+          'semester': semester,
+          'subjectCode': subjectCode.trim(),
+          'subjectTitle': subjectTitle.trim(),
+          'lecUnits': lecUnits,
+          'labUnits': labUnits,
+        }),
+      );
+
+      if (response.statusCode == 401) {
+        await _handleUnauthorized();
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      if (response.statusCode != 200 && response.statusCode != 204) {
+        _errorMessage = _extractMessage(
+          response,
+          fallback: 'Failed to update study load.',
+        );
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      // Refresh with current filters
+      await fetchStudyLoads(
+        programCode: _selectedProgram,
+        yearLevel: _selectedYear,
+        semester: _selectedSemester,
+      );
+      return true;
+    } catch (e) {
+      _errorMessage = 'Error updating study load: $e';
       _isLoading = false;
       notifyListeners();
       return false;

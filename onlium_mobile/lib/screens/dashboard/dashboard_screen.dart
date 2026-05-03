@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -22,6 +23,9 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   static const String _baseUrl = 'https://localhost:7164';
 
+  int _currentIndex = 0;
+  Timer? _refreshTimer;
+
   bool _isLoadingSummary = true;
   String? _summaryError;
 
@@ -33,7 +37,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _pages.addAll([
+      _HomeTab(parentState: this),
+      const EnrollmentScreen(),
+      const StudyLoadScreen(),
+      const ResourceScreen(),
+      const AppointmentScreen(),
+    ]);
     _loadDashboardSummary();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      _loadDashboardSummary();
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadDashboardSummary() async {
@@ -415,130 +435,71 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  final List<Widget> _pages = [];
+
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
-    final recentActivities = _buildRecentActivities();
 
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF1E63B6),
-              Color(0xFF5F97D8),
-              Color(0xFF9CC8F5),
-              Color(0xFFD6ECFF),
-            ],
-          ),
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _pages,
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, -4),
+            ),
+          ],
         ),
         child: SafeArea(
-          child: RefreshIndicator(
-            onRefresh: _loadDashboardSummary,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-              children: [
-                _buildTopBar(context, authProvider),
-                const SizedBox(height: 14),
-                _buildAccountHeader(authProvider),
-                const SizedBox(height: 14),
-                _buildNotificationBanner(context),
-                const SizedBox(height: 14),
-                _buildBulletinCard(),
-                const SizedBox(height: 24),
-                const Text(
-                  'Quick Actions',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                GridView.count(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 14,
-                  crossAxisSpacing: 14,
-                  childAspectRatio: 1.06,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: [
-                    _DashboardActionCard(
-                      title: 'Enrollment',
-                      subtitle: 'Start or continue your enrollment',
-                      icon: Icons.app_registration,
-                      color: const Color(0xFF3FA34D),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const EnrollmentScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    _DashboardActionCard(
-                      title: 'Study Load',
-                      subtitle: 'View subjects and schedule',
-                      icon: Icons.menu_book,
-                      color: const Color(0xFFF5A000),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const StudyLoadScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    _DashboardActionCard(
-                      title: 'Appointment',
-                      subtitle: _latestAppointment == null
-                          ? 'Check your appointment status'
-                          : _statusLabel(
-                              _latestAppointment!['status']?.toString() ??
-                                  'Scheduled',
-                            ),
-                      icon: Icons.event_available,
-                      color: const Color(0xFF4C63D2),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const AppointmentScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                    _DashboardActionCard(
-                      title: 'Resources',
-                      subtitle: 'Open learning materials and links',
-                      icon: Icons.library_books,
-                      color: const Color(0xFF8E24AA),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const ResourceScreen(),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Recent Activity',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _buildRecentActivityCard(recentActivities),
-              ],
+          child: BottomNavigationBar(
+            currentIndex: _currentIndex,
+            onTap: (index) => setState(() => _currentIndex = index),
+            type: BottomNavigationBarType.fixed,
+            backgroundColor: Colors.white,
+            selectedItemColor: const Color(0xFF1E63B6),
+            unselectedItemColor: Colors.grey[500],
+            selectedLabelStyle: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 11,
             ),
+            unselectedLabelStyle: const TextStyle(
+              fontSize: 10,
+            ),
+            elevation: 0,
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.home_outlined),
+                activeIcon: Icon(Icons.home),
+                label: 'Home',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.people_outline),
+                activeIcon: Icon(Icons.people),
+                label: 'Students',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.school_outlined),
+                activeIcon: Icon(Icons.school),
+                label: 'Courses',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.article_outlined),
+                activeIcon: Icon(Icons.article),
+                label: 'Resources',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.calendar_today_outlined),
+                activeIcon: Icon(Icons.calendar_today),
+                label: 'Appointments',
+              ),
+            ],
           ),
         ),
       ),
@@ -548,9 +509,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildTopBar(BuildContext context, AuthProvider authProvider) {
     return Row(
       children: [
-        IconButton(
-          onPressed: () => Navigator.of(context).maybePop(),
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.menu, color: Colors.white),
+          color: Colors.white,
+          onSelected: (value) async {
+            if (value == 'edit_profile') {
+              _showEditProfileDialog(context, authProvider);
+            } else if (value == 'logout') {
+              await authProvider.logout();
+              if (!context.mounted) return;
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+                (route) => false,
+              );
+            }
+          },
+          itemBuilder: (BuildContext context) => [
+            const PopupMenuItem(
+              value: 'edit_profile',
+              child: Row(
+                children: [
+                  Icon(Icons.edit, color: Color(0xFF1E63B6)),
+                  SizedBox(width: 12),
+                  Text('Edit Profile'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'logout',
+              child: Row(
+                children: [
+                  Icon(Icons.logout, color: Colors.red),
+                  SizedBox(width: 12),
+                  Text('Log Out', style: TextStyle(color: Colors.red)),
+                ],
+              ),
+            ),
+          ],
         ),
         const SizedBox(width: 4),
         const CircleAvatar(
@@ -569,25 +564,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
         ),
-        IconButton(
-          tooltip: 'Refresh',
-          onPressed: _loadDashboardSummary,
-          icon: const Icon(Icons.refresh, color: Colors.white),
-        ),
-        IconButton(
-          tooltip: 'Logout',
-          onPressed: () async {
-            await authProvider.logout();
-            if (!context.mounted) return;
-
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (_) => const LoginScreen()),
-              (route) => false,
-            );
-          },
-          icon: const Icon(Icons.logout, color: Colors.white),
-        ),
       ],
+    );
+  }
+
+  void _showEditProfileDialog(BuildContext context, AuthProvider authProvider) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Profile'),
+        content: const Text('Edit profile functionality coming soon!'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1040,6 +1033,69 @@ class _NewBadge extends StatelessWidget {
           color: Colors.white,
           fontWeight: FontWeight.bold,
           fontSize: 11,
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeTab extends StatefulWidget {
+  final _DashboardScreenState parentState;
+
+  const _HomeTab({required this.parentState});
+
+  @override
+  State<_HomeTab> createState() => _HomeTabState();
+}
+
+class _HomeTabState extends State<_HomeTab> {
+  @override
+  Widget build(BuildContext context) {
+    final parent = widget.parentState;
+    final authProvider = context.watch<AuthProvider>();
+    final recentActivities = parent._buildRecentActivities();
+
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFF1E63B6),
+            Color(0xFF5F97D8),
+            Color(0xFF9CC8F5),
+            Color(0xFFD6ECFF),
+          ],
+        ),
+      ),
+      child: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: parent._loadDashboardSummary,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+            children: [
+              parent._buildTopBar(context, authProvider),
+              const SizedBox(height: 14),
+              parent._buildAccountHeader(authProvider),
+              const SizedBox(height: 14),
+              parent._buildNotificationBanner(context),
+              const SizedBox(height: 14),
+              parent._buildBulletinCard(),
+              const SizedBox(height: 24),
+              const Text(
+                'Recent Activity',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 12),
+              parent._buildRecentActivityCard(recentActivities),
+            ],
+          ),
         ),
       ),
     );

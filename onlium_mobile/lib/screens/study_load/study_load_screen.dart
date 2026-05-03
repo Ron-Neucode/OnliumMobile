@@ -570,13 +570,7 @@ class _StudyLoadScreenState extends State<StudyLoadScreen> {
             backgroundColor: Colors.blue,
             foregroundColor: Colors.white,
             elevation: 0,
-            actions: [
-              if (isSignedIn)
-                IconButton(
-                  onPressed: _fetchStudyLoad,
-                  icon: const Icon(Icons.refresh),
-                ),
-            ],
+            automaticallyImplyLeading: false,
           ),
           body: !isSignedIn
               ? _buildNotSignedInView()

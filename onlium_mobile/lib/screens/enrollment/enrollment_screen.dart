@@ -46,16 +46,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
             backgroundColor: Colors.blue,
             foregroundColor: Colors.white,
             elevation: 0,
-            leading: _selectedStudentType == null
-                ? null
-                : IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    onPressed: () {
-                      setState(() {
-                        _selectedStudentType = null;
-                      });
-                    },
-                  ),
+            automaticallyImplyLeading: false,
           ),
           body: _selectedStudentType == null
               ? _buildTypeSelection()
@@ -155,6 +146,33 @@ class _EnrollmentScreenState extends State<EnrollmentScreen> {
   }
 
   Widget _buildEnrollmentForm() {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: OutlinedButton.icon(
+            onPressed: () {
+              setState(() {
+                _selectedStudentType = null;
+              });
+            },
+            icon: const Icon(Icons.arrow_back),
+            label: const Text('Change Student Type'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              side: const BorderSide(color: Colors.white),
+              minimumSize: const Size(double.infinity, 44),
+            ),
+          ),
+        ),
+        Expanded(
+          child: _buildEnrollmentFormContent(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEnrollmentFormContent() {
     switch (_selectedStudentType!) {
       case EnrollmentStudentType.newIncoming:
         return const NewIncomingEnrollment();
@@ -196,7 +214,7 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
   // For Android emulator, you may need:
   // static const String _baseUrl = 'http://10.0.2.2:5027';
   // For Windows desktop, you may use:
-  // static const String _baseUrl = 'http://localhost:5027';
+  // static const String _baseUrl = 'https://localhost:7164';
 
   final _formKey = GlobalKey<FormState>();
 
@@ -726,6 +744,7 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
             value: _selectedGender,
+            isExpanded: true,
             decoration: _buildInputDecoration('Gender', Icons.person_outline),
             items: const [
               DropdownMenuItem(value: 'Male', child: Text('Male')),
@@ -829,25 +848,26 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
             value: _guardianRelationship,
+            isExpanded: true,
             decoration: _buildInputDecoration(
               'Relationship to Student',
               Icons.family_restroom,
             ),
             items: const [
-              DropdownMenuItem(value: 'Mother', child: Text('Mother')),
-              DropdownMenuItem(value: 'Father', child: Text('Father')),
-              DropdownMenuItem(value: 'Guardian', child: Text('Guardian')),
-              DropdownMenuItem(value: 'Aunt', child: Text('Aunt')),
-              DropdownMenuItem(value: 'Uncle', child: Text('Uncle')),
+              DropdownMenuItem(value: 'Mother', child: Text('Mother', overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(value: 'Father', child: Text('Father', overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(value: 'Guardian', child: Text('Guardian', overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(value: 'Aunt', child: Text('Aunt', overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(value: 'Uncle', child: Text('Uncle', overflow: TextOverflow.ellipsis)),
               DropdownMenuItem(
                 value: 'Grandmother',
-                child: Text('Grandmother'),
+                child: Text('Grandmother', overflow: TextOverflow.ellipsis),
               ),
               DropdownMenuItem(
                 value: 'Grandfather',
-                child: Text('Grandfather'),
+                child: Text('Grandfather', overflow: TextOverflow.ellipsis),
               ),
-              DropdownMenuItem(value: 'Other', child: Text('Other')),
+              DropdownMenuItem(value: 'Other', child: Text('Other', overflow: TextOverflow.ellipsis)),
             ],
             onChanged: (value) {
               setState(() {
@@ -910,11 +930,12 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
         children: [
           DropdownButtonFormField<String>(
             value: _selectedProgram,
+            isExpanded: true,
             decoration: _buildInputDecoration('Select Program', Icons.school),
             items: _availablePrograms.map((program) {
               return DropdownMenuItem<String>(
                 value: program,
-                child: Text(program),
+                child: Text(program, overflow: TextOverflow.ellipsis),
               );
             }).toList(),
             onChanged: (value) {
@@ -929,6 +950,7 @@ class _BaseEnrollmentScreenState extends State<BaseEnrollmentScreen> {
           const SizedBox(height: 16),
           DropdownButtonFormField<Schedule>(
             value: _preferredSchedule,
+            isExpanded: true,
             decoration: _buildInputDecoration(
               'Preferred Schedule',
               Icons.schedule,

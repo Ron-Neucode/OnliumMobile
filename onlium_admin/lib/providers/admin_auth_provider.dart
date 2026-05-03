@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/admin.dart';
 
 class AdminAuthProvider extends ChangeNotifier {
-  static const String _baseUrl = 'https://localhost:7164';
+static const String _baseUrl = 'https://localhost:7164';
   // Android emulator:
   // static const String _baseUrl = 'http://10.0.2.2:5027';
   // Windows desktop:

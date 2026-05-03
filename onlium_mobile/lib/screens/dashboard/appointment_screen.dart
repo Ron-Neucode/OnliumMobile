@@ -17,7 +17,7 @@ class AppointmentScreen extends StatefulWidget {
 class _AppointmentScreenState extends State<AppointmentScreen> {
   static const String _baseUrl = 'https://localhost:7164';
   // For Windows desktop, use:
-  // static const String _baseUrl = 'http://localhost:5027';
+  // static const String _baseUrl = 'https://localhost:7164';
 
   bool _isLoading = true;
   String? _errorMessage;
@@ -175,6 +175,7 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
         title: const Text('Appointment'),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        automaticallyImplyLeading: false,
         actions: [
           IconButton(
             onPressed: _loadAppointments,

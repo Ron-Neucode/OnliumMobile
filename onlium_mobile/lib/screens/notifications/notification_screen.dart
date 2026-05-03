@@ -170,6 +170,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         title: const Text('Notifications'),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        automaticallyImplyLeading: false,
         actions: [
           IconButton(
             onPressed: _loadNotifications,

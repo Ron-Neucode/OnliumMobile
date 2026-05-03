@@ -270,6 +270,7 @@ class _ContinuingEnrollmentState extends State<ContinuingEnrollment> {
         children: [
           DropdownButtonFormField<String>(
             value: _selectedYear,
+            isExpanded: true,
             decoration: InputDecoration(
               labelText: 'Select Year',
               prefixIcon: const Icon(Icons.school),
@@ -295,6 +296,7 @@ class _ContinuingEnrollmentState extends State<ContinuingEnrollment> {
           const SizedBox(height: 16),
           DropdownButtonFormField<String>(
             value: _selectedProgram,
+            isExpanded: true,
             decoration: InputDecoration(
               labelText: 'Select Program',
               prefixIcon: const Icon(Icons.book),
@@ -305,7 +307,7 @@ class _ContinuingEnrollmentState extends State<ContinuingEnrollment> {
             items: _availablePrograms.map((program) {
               return DropdownMenuItem<String>(
                 value: program,
-                child: Text(program),
+                child: Text(program, overflow: TextOverflow.ellipsis),
               );
             }).toList(),
             onChanged: (value) {
@@ -323,6 +325,7 @@ class _ContinuingEnrollmentState extends State<ContinuingEnrollment> {
           const SizedBox(height: 16),
           DropdownButtonFormField<Schedule>(
             value: _preferredSchedule,
+            isExpanded: true,
             decoration: InputDecoration(
               labelText: 'Preferred Schedule',
               prefixIcon: const Icon(Icons.schedule),
