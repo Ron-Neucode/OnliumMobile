@@ -1321,26 +1321,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
                     children: [
 
-                      Scaffold(
-                        backgroundColor: Colors.transparent,
-                        body: _buildResourceList(examLinks, 'LMS Exam', Colors.orange),
-                        floatingActionButton: FloatingActionButton.extended(
-                          onPressed: () => _showAddResourceDialog(context, initialType: 'LMS Exam'),
-                          icon: const Icon(Icons.add),
-                          label: const Text('Add Exam'),
-                          backgroundColor: Colors.orange,
-                        ),
-                      ),
-                      Scaffold(
-                        backgroundColor: Colors.transparent,
-                        body: _buildResourceList(quizLinks, 'LMS Quiz', Colors.purple),
-                        floatingActionButton: FloatingActionButton.extended(
-                          onPressed: () => _showAddResourceDialog(context, initialType: 'LMS Quiz'),
-                          icon: const Icon(Icons.add),
-                          label: const Text('Add Quiz'),
-                          backgroundColor: Colors.purple,
-                        ),
-                      ),
+                      _buildResourceTabContent(examLinks, 'LMS Exam', Colors.orange),
+
+                      _buildResourceTabContent(quizLinks, 'LMS Quiz', Colors.purple),
 
                     ],
 
@@ -1363,6 +1346,27 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
 
+
+  Widget _buildResourceTabContent(List<Map<String, dynamic>> resources, String type, Color color) {
+    return Column(
+      children: [
+        // Add Resource Form
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.95),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: _ResourceAddForm(type: type, color: color),
+        ),
+        const SizedBox(height: 16),
+        // Resource List
+        Expanded(
+          child: _buildResourceList(resources, type, color),
+        ),
+      ],
+    );
+  }
 
   Widget _buildResourceList(List<Map<String, dynamic>> resources, String type, Color color) {
 
@@ -1404,9 +1408,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
             const SizedBox(height: 8),
 
-            const Text(
+            Text(
 
-              'Tap + to add a resource',
+              'Use the form above to add a $type link',
 
               style: TextStyle(
 
@@ -10689,4 +10693,157 @@ class _TabScreenState extends State<_TabScreen> {
 
   }
 
+}
+
+// Inline form widget for adding resources
+class _ResourceAddForm extends StatefulWidget {
+  final String type;
+  final Color color;
+
+  const _ResourceAddForm({required this.type, required this.color});
+
+  @override
+  State<_ResourceAddForm> createState() => _ResourceAddFormState();
+}
+
+class _ResourceAddFormState extends State<_ResourceAddForm> {
+  final _formKey = GlobalKey<FormState>();
+  final _titleController = TextEditingController();
+  final _urlController = TextEditingController();
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _urlController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    final provider = Provider.of<AdminResourcesApiProvider>(context, listen: false);
+    final success = await provider.createResource(
+      resourceType: widget.type,
+      title: _titleController.text.trim(),
+      url: _urlController.text.trim(),
+    );
+
+    if (!mounted) return;
+
+    setState(() => _isLoading = false);
+
+    if (success) {
+      _titleController.clear();
+      _urlController.clear();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${widget.type} added successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(provider.errorMessage ?? 'Failed to add ${widget.type}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header
+          Row(
+            children: [
+              Icon(
+                widget.type == 'LMS Exam' ? Icons.assignment : Icons.quiz,
+                color: widget.color,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Add ${widget.type} Link',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: widget.color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Title Field
+          TextFormField(
+            controller: _titleController,
+            decoration: InputDecoration(
+              labelText: 'Title',
+              hintText: 'e.g., Midterm Review',
+              border: const OutlineInputBorder(),
+              prefixIcon: const Icon(Icons.title),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            ),
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return 'Please enter a title';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 10),
+          // URL Field
+          TextFormField(
+            controller: _urlController,
+            decoration: InputDecoration(
+              labelText: 'URL',
+              hintText: 'https://...',
+              border: const OutlineInputBorder(),
+              prefixIcon: const Icon(Icons.link),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            ),
+            keyboardType: TextInputType.url,
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return 'Please enter a URL';
+              }
+              final trimmed = value.trim();
+              if (!trimmed.toLowerCase().startsWith('http://') &&
+                  !trimmed.toLowerCase().startsWith('https://')) {
+                return 'URL must start with http:// or https://';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 12),
+          // Add Button
+          ElevatedButton.icon(
+            onPressed: _isLoading ? null : _submit,
+            icon: _isLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.add),
+            label: Text(_isLoading ? 'Adding...' : 'Add ${widget.type}'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: widget.color,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
