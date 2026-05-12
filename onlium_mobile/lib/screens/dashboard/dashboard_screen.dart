@@ -5,13 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
+import '../../config/api_config.dart';
 import '../../providers/auth_provider.dart';
 import '../auth/login_screen.dart';
 import '../dashboard/appointment_screen.dart';
 import '../enrollment/enrollment_screen.dart';
 import '../notifications/notification_screen.dart';
-import '../study_load/study_load_screen.dart';
 import '../resources/resource_screen.dart';
+import '../study_load/study_load_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -21,8 +22,6 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  static const String _baseUrl = 'https://localhost:7164';
-
   int _currentIndex = 0;
   Timer? _refreshTimer;
 
@@ -34,9 +33,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<Map<String, dynamic>> _applications = [];
   List<Map<String, dynamic>> _bulletins = [];
 
+  final List<Widget> _pages = [];
+
   @override
   void initState() {
     super.initState();
+
     _pages.addAll([
       _HomeTab(parentState: this),
       const EnrollmentScreen(),
@@ -44,9 +46,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       const ResourceScreen(),
       const AppointmentScreen(),
     ]);
-    _loadDashboardSummary();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadDashboardSummary();
+    });
+
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _loadDashboardSummary(showLoading: false);
     });
   }
 
@@ -56,17 +62,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
-  Future<void> _loadDashboardSummary() async {
-    setState(() {
-      _isLoadingSummary = true;
-      _summaryError = null;
-    });
+  Future<void> _loadDashboardSummary({bool showLoading = true}) async {
+    if (!mounted) return;
+
+    if (showLoading) {
+      setState(() {
+        _isLoadingSummary = true;
+        _summaryError = null;
+      });
+    }
 
     try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final authProvider = context.read<AuthProvider>();
       final token = authProvider.token;
 
       if (token == null || token.isEmpty) {
+        if (!mounted) return;
+
         setState(() {
           _summaryError = 'You are not logged in.';
           _isLoadingSummary = false;
@@ -74,74 +86,69 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return;
       }
 
-      final notificationsResponse = await http.get(
-        Uri.parse('$_baseUrl/api/notifications/mine'),
-        headers: {'Accept': '*/*', 'Authorization': 'Bearer $token'},
-      );
+      final headers = {
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $token',
+      };
 
-      final appointmentsResponse = await http.get(
-        Uri.parse('$_baseUrl/api/appointments/mine'),
-        headers: {'Accept': '*/*', 'Authorization': 'Bearer $token'},
-      );
+      final responses = await Future.wait([
+        http.get(
+          Uri.parse('${ApiConfig.baseUrl}/api/Notifications/mine'),
+          headers: headers,
+        ),
+        http.get(
+          Uri.parse('${ApiConfig.baseUrl}/api/Appointments/mine'),
+          headers: headers,
+        ),
+        http.get(
+          Uri.parse('${ApiConfig.baseUrl}/api/Applications/mine'),
+          headers: headers,
+        ),
+        http.get(
+          Uri.parse('${ApiConfig.baseUrl}/api/Bulletins'),
+          headers: headers,
+        ),
+      ]);
 
-      final applicationsResponse = await http.get(
-        Uri.parse('$_baseUrl/api/applications/mine'),
-        headers: {'Accept': '*/*', 'Authorization': 'Bearer $token'},
-      );
-
-      final bulletinsResponse = await http.get(
-        Uri.parse('$_baseUrl/api/Bulletins'),
-        headers: {'Accept': '*/*', 'Authorization': 'Bearer $token'},
-      );
+      final notificationsResponse = responses[0];
+      final appointmentsResponse = responses[1];
+      final applicationsResponse = responses[2];
+      final bulletinsResponse = responses[3];
 
       List<Map<String, dynamic>> notifications = [];
       List<Map<String, dynamic>> appointments = [];
       List<Map<String, dynamic>> applications = [];
       List<Map<String, dynamic>> bulletins = [];
-      String? errorMessage;
+      final errors = <String>[];
 
       if (notificationsResponse.statusCode == 200) {
-        final decoded = jsonDecode(notificationsResponse.body) as List<dynamic>;
-        notifications = decoded
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
+        notifications = _decodeList(notificationsResponse.body);
       } else if (notificationsResponse.statusCode != 401) {
-        errorMessage =
-            'Notifications failed: ${notificationsResponse.statusCode}';
+        errors.add('Notifications failed: ${notificationsResponse.statusCode}');
       }
 
       if (appointmentsResponse.statusCode == 200) {
-        final decoded = jsonDecode(appointmentsResponse.body) as List<dynamic>;
-        appointments = decoded
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
+        appointments = _decodeList(appointmentsResponse.body);
       } else if (appointmentsResponse.statusCode != 401) {
-        errorMessage = errorMessage == null
-            ? 'Appointments failed: ${appointmentsResponse.statusCode}'
-            : '$errorMessage • Appointments failed: ${appointmentsResponse.statusCode}';
+        errors.add('Appointments failed: ${appointmentsResponse.statusCode}');
       }
 
       if (applicationsResponse.statusCode == 200) {
-        final decoded = jsonDecode(applicationsResponse.body) as List<dynamic>;
-        applications = decoded
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
+        applications = _decodeList(applicationsResponse.body);
       } else if (applicationsResponse.statusCode != 401) {
-        errorMessage = errorMessage == null
-            ? 'Applications failed: ${applicationsResponse.statusCode}'
-            : '$errorMessage • Applications failed: ${applicationsResponse.statusCode}';
+        errors.add('Applications failed: ${applicationsResponse.statusCode}');
       }
 
       if (bulletinsResponse.statusCode == 200) {
-        final decoded = jsonDecode(bulletinsResponse.body) as List<dynamic>;
-        bulletins = decoded
-            .map((e) => Map<String, dynamic>.from(e as Map))
-            .toList();
+        bulletins = _decodeList(bulletinsResponse.body);
       } else if (bulletinsResponse.statusCode != 401) {
-        errorMessage = errorMessage == null
-            ? 'Bulletins failed: ${bulletinsResponse.statusCode}'
-            : '$errorMessage • Bulletins failed: ${bulletinsResponse.statusCode}';
+        errors.add('Bulletins failed: ${bulletinsResponse.statusCode}');
       }
+
+      _sortByNewest(notifications, 'createdAt');
+      _sortByNewest(appointments, 'appointmentDate');
+      _sortApplicationsByNewest(applications);
+      _sortByNewest(bulletins, 'createdAt');
 
       if (!mounted) return;
 
@@ -150,7 +157,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _appointments = appointments;
         _applications = applications;
         _bulletins = bulletins;
-        _summaryError = errorMessage;
+        _summaryError = errors.isEmpty ? null : errors.join(' • ');
         _isLoadingSummary = false;
       });
     } catch (e) {
@@ -161,6 +168,47 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _isLoadingSummary = false;
       });
     }
+  }
+
+  List<Map<String, dynamic>> _decodeList(String body) {
+    final decoded = jsonDecode(body);
+
+    if (decoded is! List) {
+      return [];
+    }
+
+    return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  void _sortByNewest(List<Map<String, dynamic>> items, String dateKey) {
+    items.sort((a, b) {
+      final aDate =
+          DateTime.tryParse(a[dateKey]?.toString() ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final bDate =
+          DateTime.tryParse(b[dateKey]?.toString() ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+
+      return bDate.compareTo(aDate);
+    });
+  }
+
+  void _sortApplicationsByNewest(List<Map<String, dynamic>> items) {
+    items.sort((a, b) {
+      final aDate =
+          DateTime.tryParse(
+            a['submittedAt']?.toString() ?? a['createdAt']?.toString() ?? '',
+          ) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+
+      final bDate =
+          DateTime.tryParse(
+            b['submittedAt']?.toString() ?? b['createdAt']?.toString() ?? '',
+          ) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+
+      return bDate.compareTo(aDate);
+    });
   }
 
   int get _unreadNotificationCount =>
@@ -175,36 +223,133 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic>? get _latestBulletin =>
       _bulletins.isNotEmpty ? _bulletins.first : null;
 
-  bool get _isEnrolled =>
-      (_latestApplication?['status']?.toString() ?? '') == 'Completed';
+  String get _latestApplicationStatus =>
+      _latestApplication?['status']?.toString().trim() ?? '';
 
-  String get _studentStatusText => _isEnrolled ? 'Enrolled' : 'Not Enrolled';
+  String get _latestAppointmentStatus =>
+      _latestAppointment?['status']?.toString().trim() ?? '';
+
+  bool get _hasCompletedAppointment =>
+      _latestAppointmentStatus.toLowerCase() == 'completed';
+
+  bool get _hasCompletedApplication {
+    final status = _latestApplicationStatus.toLowerCase();
+
+    return status == 'completed' || status == 'enrolled';
+  }
+
+  bool get _isEnrolled => _hasCompletedAppointment || _hasCompletedApplication;
+
+  String get _studentStatusText {
+    if (_isEnrolled) return 'Enrolled';
+
+    final appStatus = _latestApplicationStatus.toLowerCase();
+    final appointmentStatus = _latestAppointmentStatus.toLowerCase();
+
+    if (appointmentStatus == 'scheduled') return 'For Appointment';
+    if (appointmentStatus == 'paymentconfirmed' ||
+        appointmentStatus == 'payment confirmed') {
+      return 'Payment Confirmed';
+    }
+
+    if (appStatus == 'approved') return 'Approved';
+    if (appStatus == 'pendingreview') return 'Pending Review';
+    if (appStatus == 'rejected') return 'Rejected';
+    if (appStatus == 'draft') return 'Draft';
+
+    return 'Not Enrolled';
+  }
+
+  String get _enrollmentProgressText {
+    final appStatus = _latestApplicationStatus;
+    final appointmentStatus = _latestAppointmentStatus;
+
+    if (_hasCompletedAppointment || _hasCompletedApplication) {
+      return 'Enrollment Completed';
+    }
+
+    if (appointmentStatus.isNotEmpty) {
+      return _friendlyAppointmentStatus(appointmentStatus);
+    }
+
+    if (appStatus.isNotEmpty) {
+      return _friendlyApplicationStatus(appStatus);
+    }
+
+    return 'No Enrollment Yet';
+  }
+
+  Color get _studentStatusColor {
+    final status = _studentStatusText.toLowerCase();
+
+    if (status == 'enrolled' ||
+        status == 'approved' ||
+        status == 'payment confirmed') {
+      return Colors.green;
+    }
+
+    if (status == 'pending review' ||
+        status == 'for appointment' ||
+        status == 'draft') {
+      return Colors.orange;
+    }
+
+    if (status == 'rejected') {
+      return Colors.red;
+    }
+
+    return Colors.orange;
+  }
 
   String _friendlyApplicationStatus(String? status) {
-    switch (status) {
-      case 'Draft':
+    switch (status?.trim().toLowerCase()) {
+      case 'draft':
         return 'Draft';
-      case 'PendingReview':
+      case 'pendingreview':
+      case 'pending review':
         return 'Pending Review';
-      case 'Approved':
-        return 'Approved';
-      case 'Rejected':
-        return 'Rejected';
-      case 'Completed':
-        return 'Enrolled';
+      case 'approved':
+        return 'Application Approved';
+      case 'rejected':
+        return 'Application Rejected';
+      case 'paymentrequired':
+      case 'payment required':
+        return 'Payment Required';
+      case 'completed':
+      case 'enrolled':
+        return 'Enrollment Completed';
       default:
         return status == null || status.isEmpty ? 'No Enrollment Yet' : status;
     }
   }
 
-  String _statusLabel(String status) {
-    switch (status) {
-      case 'Scheduled':
+  String _friendlyAppointmentStatus(String? status) {
+    switch (status?.trim().toLowerCase()) {
+      case 'scheduled':
         return 'Appointment Scheduled';
-      case 'PaymentConfirmed':
+      case 'paymentconfirmed':
+      case 'payment confirmed':
         return 'Payment Confirmed';
-      case 'Completed':
+      case 'completed':
         return 'Enrollment Completed';
+      case 'cancelled':
+        return 'Appointment Cancelled';
+      default:
+        return status == null || status.isEmpty ? 'No Appointment Yet' : status;
+    }
+  }
+
+  String _statusLabel(String status) {
+    switch (status.trim().toLowerCase()) {
+      case 'scheduled':
+        return 'Appointment Scheduled';
+      case 'paymentconfirmed':
+      case 'payment confirmed':
+        return 'Payment Confirmed';
+      case 'completed':
+        return 'Enrollment Completed';
+      case 'cancelled':
+        return 'Appointment Cancelled';
       default:
         return status;
     }
@@ -215,6 +360,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final raw = value.toString();
     final parsed = DateTime.tryParse(raw);
+
     if (parsed == null) return raw;
 
     final hour = parsed.hour == 0
@@ -222,6 +368,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         : parsed.hour > 12
         ? parsed.hour - 12
         : parsed.hour;
+
     final minute = parsed.minute.toString().padLeft(2, '0');
     final period = parsed.hour >= 12 ? 'PM' : 'AM';
 
@@ -235,20 +382,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   IconData _notificationTypeIcon(String type) {
-    switch (type) {
-      case 'Approval':
-        return Icons.check_circle;
-      case 'Rejection':
-        return Icons.cancel;
-      case 'Appointment':
-        return Icons.event;
-      case 'Payment':
-        return Icons.payments;
-      case 'Enrollment':
+    switch (type.trim().toLowerCase()) {
+      case 'application':
+      case 'approval':
+      case 'enrollment':
         return Icons.school;
-      case 'Bulletin':
+      case 'rejection':
+        return Icons.cancel;
+      case 'appointment':
+        return Icons.event;
+      case 'payment':
+        return Icons.payments;
+      case 'bulletin':
         return Icons.campaign;
-      case 'LMS':
+      case 'lms':
+      case 'resource':
         return Icons.link;
       default:
         return Icons.notifications;
@@ -256,20 +404,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Color _notificationTypeColor(String type) {
-    switch (type) {
-      case 'Approval':
+    switch (type.trim().toLowerCase()) {
+      case 'application':
+      case 'approval':
+      case 'enrollment':
         return Colors.green;
-      case 'Rejection':
+      case 'rejection':
         return Colors.red;
-      case 'Appointment':
+      case 'appointment':
         return Colors.orange;
-      case 'Payment':
+      case 'payment':
         return Colors.blue;
-      case 'Enrollment':
-        return Colors.teal;
-      case 'Bulletin':
+      case 'bulletin':
         return Colors.indigo;
-      case 'LMS':
+      case 'lms':
+      case 'resource':
         return Colors.purple;
       default:
         return Colors.grey;
@@ -280,12 +429,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final items = <_RecentActivityItem>[];
 
     if (_latestApplication != null) {
+      final status = _latestApplication!['status']?.toString() ?? '';
+
       items.add(
         _RecentActivityItem(
           title: 'Enrollment Status',
-          subtitle: _friendlyApplicationStatus(
-            _latestApplication!['status']?.toString(),
-          ),
+          subtitle: _friendlyApplicationStatus(status),
           trailingText: _formatDate(
             _latestApplication!['submittedAt'] ??
                 _latestApplication!['createdAt'],
@@ -307,9 +456,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           trailingText:
               _latestAppointment!['location']?.toString() ?? 'School Campus',
           icon: Icons.event_available,
-          iconColor: status == 'Completed'
+          iconColor: status.toLowerCase() == 'completed'
               ? Colors.green
-              : status == 'PaymentConfirmed'
+              : status.toLowerCase() == 'paymentconfirmed'
               ? Colors.blue
               : Colors.orange,
         ),
@@ -394,6 +543,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         itemCount: _bulletins.length,
                         itemBuilder: (context, index) {
                           final bulletin = _bulletins[index];
+
                           return Card(
                             margin: const EdgeInsets.only(bottom: 10),
                             child: Padding(
@@ -435,17 +585,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  final List<Widget> _pages = [];
-
   @override
   Widget build(BuildContext context) {
-    final authProvider = context.watch<AuthProvider>();
-
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _pages,
-      ),
+      body: IndexedStack(index: _currentIndex, children: _pages),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -460,7 +603,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: SafeArea(
           child: BottomNavigationBar(
             currentIndex: _currentIndex,
-            onTap: (index) => setState(() => _currentIndex = index),
+            onTap: (index) {
+              setState(() => _currentIndex = index);
+
+              if (index == 0) {
+                _loadDashboardSummary();
+              }
+            },
             type: BottomNavigationBarType.fixed,
             backgroundColor: Colors.white,
             selectedItemColor: const Color(0xFF1E63B6),
@@ -469,9 +618,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               fontWeight: FontWeight.bold,
               fontSize: 11,
             ),
-            unselectedLabelStyle: const TextStyle(
-              fontSize: 10,
-            ),
+            unselectedLabelStyle: const TextStyle(fontSize: 10),
             elevation: 0,
             items: const [
               BottomNavigationBarItem(
@@ -480,14 +627,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 label: 'Home',
               ),
               BottomNavigationBarItem(
-                icon: Icon(Icons.people_outline),
-                activeIcon: Icon(Icons.people),
-                label: 'Students',
+                icon: Icon(Icons.assignment_outlined),
+                activeIcon: Icon(Icons.assignment),
+                label: 'Enrollment',
               ),
               BottomNavigationBarItem(
                 icon: Icon(Icons.school_outlined),
                 activeIcon: Icon(Icons.school),
-                label: 'Courses',
+                label: 'Study Load',
               ),
               BottomNavigationBarItem(
                 icon: Icon(Icons.article_outlined),
@@ -517,7 +664,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _showEditProfileDialog(context, authProvider);
             } else if (value == 'logout') {
               await authProvider.logout();
+
               if (!context.mounted) return;
+
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => const LoginScreen()),
                 (route) => false,
@@ -589,9 +738,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ? authProvider.fullName!
         : 'Student';
 
-    final applicationStatus = _friendlyApplicationStatus(
-      _latestApplication?['status']?.toString(),
-    );
+    final statusColor = _studentStatusColor;
 
     return Container(
       width: double.infinity,
@@ -654,17 +801,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         vertical: 5,
                       ),
                       decoration: BoxDecoration(
-                        color: _isEnrolled
-                            ? Colors.green.withOpacity(0.15)
-                            : Colors.orange.withOpacity(0.15),
+                        color: statusColor.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: Text(
                         _studentStatusText,
                         style: TextStyle(
-                          color: _isEnrolled
-                              ? Colors.green[800]
-                              : Colors.orange[800],
+                          color: statusColor,
                           fontWeight: FontWeight.bold,
                           fontSize: 12,
                         ),
@@ -674,7 +817,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Enrollment Progress: $applicationStatus',
+                  'Enrollment Progress: $_enrollmentProgressText',
                   style: const TextStyle(fontSize: 14, color: Colors.black87),
                 ),
                 const SizedBox(height: 6),
@@ -935,82 +1078,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           );
         }),
-      ),
-    );
-  }
-}
-
-class _DashboardActionCard extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color color;
-  final VoidCallback onTap;
-
-  const _DashboardActionCard({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: onTap,
-        child: Ink(
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.96),
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.08),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                const Spacer(),
-                CircleAvatar(
-                  radius: 30,
-                  backgroundColor: color.withOpacity(0.12),
-                  child: Icon(icon, color: color, size: 30),
-                ),
-                const SizedBox(height: 18),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: Colors.grey[700],
-                    height: 1.35,
-                  ),
-                  textAlign: TextAlign.center,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const Spacer(),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

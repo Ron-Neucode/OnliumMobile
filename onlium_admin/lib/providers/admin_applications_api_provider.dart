@@ -126,18 +126,38 @@ class AdminApplicationsApiProvider extends ChangeNotifier {
 
   Future<List<Map<String, dynamic>>> _fetchByStatus(String status) async {
     final token = await _requireToken();
+
     if (token == null) {
-      throw Exception(_errorMessage);
+      throw Exception(
+          _errorMessage ?? 'Admin token not found. Please log in again.');
     }
 
+    final uri = Uri.parse('$_baseUrl/api/admin/applications').replace(
+      queryParameters: {
+        'status': status,
+      },
+    );
+
     final response = await http.get(
-      Uri.parse('$_baseUrl/api/admin/applications?status=$status'),
+      uri,
       headers: _authHeaders(token),
     );
 
+    if (kDebugMode) {
+      print('ADMIN APPLICATION REQUEST: $uri');
+      print('STATUS CODE: ${response.statusCode}');
+      print('BODY: ${response.body}');
+    }
+
     if (response.statusCode == 401) {
       await _handleUnauthorized();
-      throw Exception(_errorMessage);
+      throw Exception(_errorMessage ?? 'Session expired. Please log in again.');
+    }
+
+    if (response.statusCode == 403) {
+      throw Exception(
+        'This account is not authorized to view admin applications. Please log in using a backend Admin account.',
+      );
     }
 
     if (response.statusCode != 200) {
@@ -149,7 +169,13 @@ class AdminApplicationsApiProvider extends ChangeNotifier {
       );
     }
 
-    final decoded = jsonDecode(response.body) as List<dynamic>;
+    final decoded = jsonDecode(response.body);
+
+    if (decoded is! List) {
+      throw Exception(
+          'Invalid server response. Expected a list of applications.');
+    }
+
     return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
@@ -174,6 +200,11 @@ class AdminApplicationsApiProvider extends ChangeNotifier {
   Future<void> fetchAllEnrollments() async {
     _isLoading = true;
     _errorMessage = null;
+
+    _pendingEnrollments.clear();
+    _approvedEnrollments.clear();
+    _rejectedEnrollments.clear();
+
     notifyListeners();
 
     try {
@@ -192,8 +223,22 @@ class AdminApplicationsApiProvider extends ChangeNotifier {
       _rejectedEnrollments
         ..clear()
         ..addAll(rejected);
+
+      if (kDebugMode) {
+        print('PENDING APPLICATIONS: ${_pendingEnrollments.length}');
+        print('APPROVED APPLICATIONS: ${_approvedEnrollments.length}');
+        print('REJECTED APPLICATIONS: ${_rejectedEnrollments.length}');
+      }
     } catch (e) {
-      _errorMessage = 'Error loading enrollments: $e';
+      _pendingEnrollments.clear();
+      _approvedEnrollments.clear();
+      _rejectedEnrollments.clear();
+
+      _errorMessage = 'Error loading applications: $e';
+
+      if (kDebugMode) {
+        print(_errorMessage);
+      }
     } finally {
       _isLoading = false;
       notifyListeners();

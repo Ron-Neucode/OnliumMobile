@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../providers/auth_provider.dart';
 import '../dashboard/dashboard_screen.dart';
+import 'forgot_password_screen.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -53,7 +54,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final success = await authProvider.login(
       _emailController.text.trim(),
-      _passwordController.text.trim(),
+      _passwordController.text,
     );
 
     if (!mounted) return;
@@ -62,23 +63,37 @@ class _LoginScreenState extends State<LoginScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Welcome${authProvider.fullName != null && authProvider.fullName!.isNotEmpty ? ', ${authProvider.fullName}' : ''}!',
+            authProvider.fullName != null && authProvider.fullName!.isNotEmpty
+                ? 'Welcome, ${authProvider.fullName}!'
+                : 'Login successful!',
           ),
           backgroundColor: Colors.green,
         ),
       );
 
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        MaterialPageRoute(builder: (_) => const DashboardScreen()),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(authProvider.errorMessage ?? 'Login failed'),
+          content: Text(authProvider.errorMessage ?? 'Login failed.'),
           backgroundColor: Colors.red,
         ),
       );
     }
+  }
+
+  void _goToForgotPassword() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()));
+  }
+
+  void _goToRegister() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const RegisterScreen()));
   }
 
   @override
@@ -89,10 +104,12 @@ class _LoginScreenState extends State<LoginScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        leading: Navigator.of(context).canPop()
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.of(context).pop(),
+              )
+            : null,
       ),
       body: Container(
         constraints: const BoxConstraints.expand(),
@@ -149,6 +166,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
             ),
+
             SafeArea(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
@@ -156,6 +174,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const SizedBox(height: 100),
+
                     Image.asset(
                       'assets/images/Logos.png',
                       height: 80,
@@ -167,7 +186,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         );
                       },
                     ),
+
                     const SizedBox(height: 20),
+
                     const Text(
                       'Sign In',
                       textAlign: TextAlign.center,
@@ -177,7 +198,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         color: Colors.white,
                       ),
                     ),
+
                     const SizedBox(height: 30),
+
                     Form(
                       key: _formKey,
                       child: Column(
@@ -190,22 +213,26 @@ class _LoginScreenState extends State<LoginScreen> {
                               icon: Icons.email,
                             ),
                             validator: (value) {
-                              if (value == null || value.trim().isEmpty) {
+                              final email = value?.trim() ?? '';
+
+                              if (email.isEmpty) {
                                 return 'Please enter your email';
                               }
 
                               final emailRegex = RegExp(
-                                r'^[\w\.-]+@([\w-]+\.)+[\w-]{2,4}$',
+                                r'^[\w\.-]+@([\w-]+\.)+[\w-]{2,}$',
                               );
 
-                              if (!emailRegex.hasMatch(value.trim())) {
+                              if (!emailRegex.hasMatch(email)) {
                                 return 'Please enter a valid email';
                               }
 
                               return null;
                             },
                           ),
+
                           const SizedBox(height: 20),
+
                           TextFormField(
                             controller: _passwordController,
                             obscureText: _obscurePassword,
@@ -217,6 +244,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   _obscurePassword
                                       ? Icons.visibility
                                       : Icons.visibility_off,
+                                  color: const Color(0xFF1E4A8A),
                                 ),
                                 onPressed: () {
                                   setState(() {
@@ -229,15 +257,36 @@ class _LoginScreenState extends State<LoginScreen> {
                               if (value == null || value.isEmpty) {
                                 return 'Please enter your password';
                               }
+
                               return null;
                             },
                           ),
-                          const SizedBox(height: 30),
+
+                          const SizedBox(height: 8),
+
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: _goToForgotPassword,
+                              child: const Text(
+                                'Forgot Password?',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 18),
+
                           Consumer<AuthProvider>(
                             builder: (context, authProvider, child) {
                               if (authProvider.isLoading) {
                                 return const Center(
-                                  child: CircularProgressIndicator(),
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                  ),
                                 );
                               }
 
@@ -269,7 +318,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         ],
                       ),
                     ),
+
                     const SizedBox(height: 20),
+
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -278,13 +329,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: TextStyle(color: Colors.grey[300]),
                         ),
                         TextButton(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) => const RegisterScreen(),
-                              ),
-                            );
-                          },
+                          onPressed: _goToRegister,
                           child: Text(
                             'Sign up',
                             style: TextStyle(

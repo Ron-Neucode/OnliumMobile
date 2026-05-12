@@ -18,6 +18,7 @@ class _ResourceScreenState extends State<ResourceScreen> {
   static const String _baseUrl = 'https://localhost:7164';
 
   bool _isLoading = true;
+  bool _isForbidden = false;
   String? _errorMessage;
   List<Map<String, dynamic>> _resources = [];
 
@@ -30,6 +31,7 @@ class _ResourceScreenState extends State<ResourceScreen> {
   Future<void> _loadResources() async {
     setState(() {
       _isLoading = true;
+      _isForbidden = false;
       _errorMessage = null;
     });
 
@@ -39,24 +41,46 @@ class _ResourceScreenState extends State<ResourceScreen> {
 
       if (token == null || token.isEmpty) {
         setState(() {
-          _errorMessage = 'You are not logged in.';
+          _resources = [];
+          _errorMessage = 'You are not logged in. Please log in again.';
           _isLoading = false;
         });
         return;
       }
 
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/resources'),
-        headers: {'Accept': '*/*', 'Authorization': 'Bearer $token'},
+        Uri.parse('$_baseUrl/api/Resources'),
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
       );
 
+      if (!mounted) return;
+
       if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body) as List<dynamic>;
+        final decoded = jsonDecode(response.body);
 
         setState(() {
-          _resources = decoded
-              .map((e) => Map<String, dynamic>.from(e as Map))
-              .toList();
+          _resources = List<Map<String, dynamic>>.from(decoded);
+          _isForbidden = false;
+          _errorMessage = null;
+          _isLoading = false;
+        });
+        return;
+      }
+
+      if (response.statusCode == 403) {
+        final message = _extractMessage(
+          response.body,
+          fallback:
+              'LMS resources are currently available only to BSIT and BSCS students. This resource is not available for your enrolled course.',
+        );
+
+        setState(() {
+          _resources = [];
+          _isForbidden = true;
+          _errorMessage = message;
           _isLoading = false;
         });
         return;
@@ -64,77 +88,134 @@ class _ResourceScreenState extends State<ResourceScreen> {
 
       if (response.statusCode == 401) {
         setState(() {
-          _errorMessage = 'Session expired. Please log in again.';
+          _resources = [];
+          _errorMessage = 'Your session has expired. Please log in again.';
           _isLoading = false;
         });
         return;
       }
 
+      final message = _extractMessage(
+        response.body,
+        fallback: 'Failed to load resources. Status: ${response.statusCode}.',
+      );
+
       setState(() {
-        _errorMessage =
-            'Failed to load resources. Status: ${response.statusCode}';
+        _resources = [];
+        _errorMessage = message;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
+
       setState(() {
-        _errorMessage = 'Error loading resources: $e';
+        _resources = [];
+        _errorMessage = 'Unable to connect to the server. Details: $e';
         _isLoading = false;
       });
     }
   }
 
-  List<Map<String, dynamic>> get _examResources => _resources
-      .where((x) => (x['resourceType']?.toString() ?? '') == 'Exam')
-      .toList();
+  String _extractMessage(String body, {required String fallback}) {
+    try {
+      final decoded = jsonDecode(body);
 
-  List<Map<String, dynamic>> get _quizResources => _resources
-      .where((x) => (x['resourceType']?.toString() ?? '') == 'Quiz')
-      .toList();
+      if (decoded is Map<String, dynamic>) {
+        return decoded['message']?.toString() ?? fallback;
+      }
 
-  bool get _isLmsAvailable => _resources.isNotEmpty;
+      return fallback;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  Map<String, dynamic>? get _examResource {
+    final matches = _resources.where((resource) {
+      final type = resource['resourceType']?.toString().toLowerCase().trim();
+      return type == 'exam' || type == 'lms exam';
+    }).toList();
+
+    if (matches.isEmpty) return null;
+    return matches.first;
+  }
+
+  Map<String, dynamic>? get _quizResource {
+    final matches = _resources.where((resource) {
+      final type = resource['resourceType']?.toString().toLowerCase().trim();
+      return type == 'quiz' || type == 'lms quiz';
+    }).toList();
+
+    if (matches.isEmpty) return null;
+    return matches.first;
+  }
+
+  bool get _hasAnyResource => _examResource != null || _quizResource != null;
 
   Color _resourceColor(String type) {
-    switch (type) {
-      case 'Exam':
-        return Colors.blue;
-      case 'Quiz':
-        return Colors.green;
+    switch (type.toLowerCase()) {
+      case 'exam':
+      case 'lms exam':
+        return const Color(0xFF1E63B6);
+      case 'quiz':
+      case 'lms quiz':
+        return const Color(0xFF16A34A);
       default:
-        return Colors.purple;
+        return const Color(0xFF7C3AED);
     }
   }
 
   IconData _resourceIcon(String type) {
-    switch (type) {
-      case 'Exam':
-        return Icons.quiz;
-      case 'Quiz':
-        return Icons.assignment;
+    switch (type.toLowerCase()) {
+      case 'exam':
+      case 'lms exam':
+        return Icons.assignment_rounded;
+      case 'quiz':
+      case 'lms quiz':
+        return Icons.quiz_rounded;
       default:
-        return Icons.link;
+        return Icons.link_rounded;
     }
   }
 
   String _resourceDescription(String type) {
-    switch (type) {
-      case 'Exam':
-        return 'Access your online examinations';
-      case 'Quiz':
-        return 'Take course quizzes and assessments';
+    switch (type.toLowerCase()) {
+      case 'exam':
+      case 'lms exam':
+        return 'Access your current online examination link.';
+      case 'quiz':
+      case 'lms quiz':
+        return 'Access your current online quiz link.';
       default:
-        return 'Open learning resource';
+        return 'Open learning resource.';
     }
   }
 
   Future<void> _launchURL(String url) async {
-    final uri = Uri.parse(url);
+    if (url.trim().isEmpty) {
+      return;
+    }
 
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+    final uri = Uri.tryParse(url.trim());
+
+    if (uri == null || !uri.hasAbsolutePath && uri.host.isEmpty) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invalid resource link.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final success = await launchUrl(uri, mode: LaunchMode.externalApplication);
+
+    if (!success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not launch $url'),
+          content: Text('Could not open $url'),
           backgroundColor: Colors.red,
         ),
       );
@@ -164,9 +245,12 @@ class _ResourceScreenState extends State<ResourceScreen> {
           body: RefreshIndicator(
             onRefresh: _loadResources,
             child: ListView(
-              padding: const EdgeInsets.all(16.0),
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
               children: [
-                _buildLMSSection(),
+                _buildHeader(),
+                const SizedBox(height: 16),
+                _buildLmsContent(),
               ],
             ),
           ),
@@ -175,208 +259,332 @@ class _ResourceScreenState extends State<ResourceScreen> {
     );
   }
 
-  Widget _buildLMSSection() {
+  Widget _buildHeader() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.92),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Learning Management System',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF102A43),
+            ),
+          ),
+          SizedBox(height: 6),
+          Text(
+            'Access your current LMS examination and quiz links posted by the administrator.',
+            style: TextStyle(
+              fontSize: 14,
+              color: Color(0xFF627D98),
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLmsContent() {
+    if (_isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (_isForbidden) {
+      return _buildAccessNoticeCard();
+    }
+
+    if (_errorMessage != null) {
+      return _buildErrorCard();
+    }
+
+    if (!_hasAnyResource) {
+      return _buildNoResourcesCard();
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Learning Management System',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
+        _buildResourceCard(
+          sectionTitle: 'LMS Exam Link',
+          resourceType: 'Exam',
+          resource: _examResource,
         ),
-        const SizedBox(height: 16),
-        if (_isLoading)
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: CircularProgressIndicator(),
-            ),
-          )
-        else if (_errorMessage != null)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.red[50],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.red[200]!),
-            ),
-            child: Column(
-              children: [
-                Icon(Icons.error_outline, size: 48, color: Colors.red[600]),
-                const SizedBox(height: 12),
-                const Text(
-                  'Unable to Load Resources',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.red,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _errorMessage!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.red),
-                ),
-              ],
-            ),
-          )
-        else if (!_isLmsAvailable)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.orange[50],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.orange[200]!),
-            ),
-            child: Column(
-              children: [
-                Icon(Icons.info_outline, size: 48, color: Colors.orange[700]),
-                const SizedBox(height: 12),
-                const Text(
-                  'No Resources Available Yet',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.orange,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Please come back later. Your admin has not posted any exam or quiz resources yet.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.orange),
-                ),
-              ],
-            ),
-          )
-        else
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_examResources.isNotEmpty) ...[
-                const Text(
-                  'Exam Links',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 0.85,
-                  ),
-                  itemCount: _examResources.length,
-                  itemBuilder: (context, index) {
-                    final resource = _examResources[index];
-                    return _buildLMSResourceCard(resource);
-                  },
-                ),
-                const SizedBox(height: 20),
-              ],
-              if (_quizResources.isNotEmpty) ...[
-                const Text(
-                  'Quiz Links',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 0.85,
-                  ),
-                  itemCount: _quizResources.length,
-                  itemBuilder: (context, index) {
-                    final resource = _quizResources[index];
-                    return _buildLMSResourceCard(resource);
-                  },
-                ),
-              ],
-            ],
-          ),
+        const SizedBox(height: 14),
+        _buildResourceCard(
+          sectionTitle: 'LMS Quiz Link',
+          resourceType: 'Quiz',
+          resource: _quizResource,
+        ),
       ],
     );
   }
 
-  Widget _buildLMSResourceCard(Map<String, dynamic> resource) {
-    final type = resource['resourceType']?.toString() ?? 'General';
-    final title = resource['title']?.toString() ?? 'Untitled Resource';
-    final url = resource['url']?.toString() ?? '';
+  Widget _buildAccessNoticeCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7E6),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFFFC857)),
+      ),
+      child: Column(
+        children: [
+          const Icon(Icons.school_outlined, size: 54, color: Color(0xFFB7791F)),
+          const SizedBox(height: 14),
+          const Text(
+            'Resource Access Notice',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Color(0xFF102A43),
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            _errorMessage ??
+                'LMS resources are currently available only to BSIT and BSCS students. This resource is not available for your enrolled course.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Color(0xFF334E68),
+              fontSize: 14,
+              height: 1.45,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: Colors.red[50],
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.red[200]!),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.error_outline, size: 54, color: Colors.red[600]),
+          const SizedBox(height: 14),
+          const Text(
+            'Unable to Load Resources',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.red,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            _errorMessage ?? 'Something went wrong.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.red, height: 1.4),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: _loadResources,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoResourcesCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: Colors.orange[50],
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.orange[200]!),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.info_outline, size: 54, color: Colors.orange[700]),
+          const SizedBox(height: 14),
+          const Text(
+            'No Resources Available Yet',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.orange,
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Please come back later. Your administrator has not posted any active exam or quiz resource yet.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.orange, height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResourceCard({
+    required String sectionTitle,
+    required String resourceType,
+    required Map<String, dynamic>? resource,
+  }) {
+    final type = resource?['resourceType']?.toString() ?? resourceType;
+    final title = resource?['title']?.toString() ?? '';
+    final url = resource?['url']?.toString() ?? '';
 
     final color = _resourceColor(type);
     final icon = _resourceIcon(type);
     final description = _resourceDescription(type);
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: url.isEmpty ? null : () => _launchURL(url),
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            gradient: LinearGradient(
-              colors: [color.withOpacity(0.1), color.withOpacity(0.05)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+    if (resource == null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.94),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFE6EEF8)),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: color.withOpacity(0.18),
+              child: Icon(icon, color: color),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    sectionTitle,
+                    style: const TextStyle(
+                      color: Color(0xFF102A43),
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  const Text(
+                    'No active link is available yet.',
+                    style: TextStyle(color: Color(0xFF627D98), fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.96),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withOpacity(0.25)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.07),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            backgroundColor: color,
+            child: Icon(icon, color: Colors.white),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  sectionTitle,
+                  style: const TextStyle(
+                    color: Color(0xFF627D98),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Color(0xFF102A43),
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  description,
+                  style: const TextStyle(
+                    color: Color(0xFF627D98),
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SelectableText(
+                  url,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: url.isEmpty ? null : () => _launchURL(url),
+                    icon: const Icon(Icons.open_in_new),
+                    label: const Text('Open Link'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: color,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: Colors.white, size: 28),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                description,
-                style: TextStyle(fontSize: 10, color: Colors.grey[600]),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
+        ],
       ),
     );
   }

@@ -36,10 +36,9 @@ class Student {
       phoneNumber: json['phoneNumber']?.toString(),
       address: json['address']?.toString(),
       gender: json['gender']?.toString() ?? 'Male',
-      program: json['program']?.toString() ??
-                json['programCode']?.toString() ??
-                json['selectedProgram']?.toString() ??
-                'Unknown',
+      program: json['program']?.toString() ?? 
+                json['selectedProgram']?.toString() ?? 
+                'BSIT',
       yearLevel: json['yearLevel']?.toString() ?? 
                  '${json['year']?.toString() ?? '1'}st Year',
       studentType: json['studentType']?.toString() ?? 'New/Incoming Student',

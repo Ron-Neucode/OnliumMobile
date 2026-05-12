@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import 'package:provider/provider.dart';
+
 import 'admin_application_details_screen.dart';
 
 import '../../providers/admin_applications_api_provider.dart';
@@ -17,12 +19,15 @@ class _AdminEnrollmentApiScreenState extends State<AdminEnrollmentApiScreen>
   late TabController _tabController;
 
   static const String _pendingStatus = 'PendingReview';
+
   static const String _approvedStatus = 'Approved';
+
   static const String _rejectedStatus = 'Rejected';
 
   @override
   void initState() {
     super.initState();
+
     _tabController = TabController(length: 3, vsync: this);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -33,6 +38,7 @@ class _AdminEnrollmentApiScreenState extends State<AdminEnrollmentApiScreen>
   @override
   void dispose() {
     _tabController.dispose();
+
     super.dispose();
   }
 
@@ -111,27 +117,40 @@ class _AdminEnrollmentApiScreenState extends State<AdminEnrollmentApiScreen>
         final enrollments = provider.getEnrollmentsByStatus(status);
 
         if (enrollments.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+          return RefreshIndicator(
+            onRefresh: () => provider.fetchAllEnrollments(),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               children: [
+                const SizedBox(height: 120),
                 Icon(Icons.inbox, size: 64, color: Colors.grey[400]),
                 const SizedBox(height: 16),
                 Text(
                   'No ${_displayStatus(status).toLowerCase()} enrollments',
+                  textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Pull down to refresh.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: Colors.grey[500]),
                 ),
               ],
             ),
           );
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(8),
-          itemCount: enrollments.length,
-          itemBuilder: (context, index) {
-            return _buildEnrollmentCard(enrollments[index], status);
-          },
+        return RefreshIndicator(
+          onRefresh: () => provider.fetchAllEnrollments(),
+          child: ListView.builder(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(8),
+            itemCount: enrollments.length,
+            itemBuilder: (context, index) {
+              return _buildEnrollmentCard(enrollments[index], status);
+            },
+          ),
         );
       },
     );
@@ -141,13 +160,20 @@ class _AdminEnrollmentApiScreenState extends State<AdminEnrollmentApiScreen>
     Map<String, dynamic> enrollment,
     String currentStatus,
   ) {
-    final firstName = enrollment['firstName']?.toString() ?? '';
-    final lastName = enrollment['lastName']?.toString() ?? '';
-    final fullName = '$firstName $lastName'.trim().isEmpty
-        ? 'Unnamed Student'
-        : '$firstName $lastName'.trim();
+    final firstName = enrollment['firstName']?.toString().trim() ?? '';
+
+    final lastName = enrollment['lastName']?.toString().trim() ?? '';
+
+    final email = enrollment['email']?.toString().trim() ?? '';
+
+    final fullName = '$firstName $lastName'.trim().isNotEmpty
+        ? '$firstName $lastName'.trim()
+        : email.isNotEmpty
+            ? email
+            : 'Unnamed Student';
 
     final studentType = enrollment['studentType']?.toString() ?? '-';
+
     final programCode = enrollment['programCode']?.toString() ?? '-';
 
     return Container(
@@ -279,23 +305,34 @@ class _AdminEnrollmentApiScreenState extends State<AdminEnrollmentApiScreen>
 
   Widget _getStatusBadge(String status) {
     Color color;
+
     IconData icon;
 
     switch (status) {
       case _pendingStatus:
         color = Colors.orange;
+
         icon = Icons.hourglass_empty;
+
         break;
+
       case _approvedStatus:
         color = Colors.green;
+
         icon = Icons.check_circle;
+
         break;
+
       case _rejectedStatus:
         color = Colors.red;
+
         icon = Icons.cancel;
+
         break;
+
       default:
         color = Colors.grey;
+
         icon = Icons.info;
     }
 
@@ -311,10 +348,13 @@ class _AdminEnrollmentApiScreenState extends State<AdminEnrollmentApiScreen>
     switch (status) {
       case _pendingStatus:
         return 'Pending';
+
       case _approvedStatus:
         return 'Approved';
+
       case _rejectedStatus:
         return 'Rejected';
+
       default:
         return status;
     }
@@ -324,10 +364,13 @@ class _AdminEnrollmentApiScreenState extends State<AdminEnrollmentApiScreen>
     switch (type) {
       case 'NewIncoming':
         return 'New/Incoming';
+
       case 'Transferee':
         return 'Transferee';
+
       case 'Continuing':
         return 'Continuing';
+
       default:
         return type;
     }
@@ -337,7 +380,9 @@ class _AdminEnrollmentApiScreenState extends State<AdminEnrollmentApiScreen>
     if (value == null) return '-';
 
     final raw = value.toString();
+
     final parsed = DateTime.tryParse(raw);
+
     if (parsed == null) return raw;
 
     return '${parsed.year.toString().padLeft(4, '0')}-'
@@ -352,12 +397,14 @@ class _AdminEnrollmentApiScreenState extends State<AdminEnrollmentApiScreen>
     Map<String, dynamic> enrollment,
   ) {
     final locationController = TextEditingController(text: 'School Campus');
+
     final notesController = TextEditingController(
       text:
           'Please proceed to the school cashier to pay your required downpayment for this semester and complete your enrollment.',
     );
 
     DateTime? selectedDate;
+
     TimeOfDay? selectedTime;
 
     showDialog(
@@ -468,6 +515,7 @@ class _AdminEnrollmentApiScreenState extends State<AdminEnrollmentApiScreen>
                         backgroundColor: Colors.orange,
                       ),
                     );
+
                     return;
                   }
 
@@ -497,6 +545,7 @@ class _AdminEnrollmentApiScreenState extends State<AdminEnrollmentApiScreen>
                         backgroundColor: Colors.red,
                       ),
                     );
+
                     return;
                   }
 
@@ -559,6 +608,7 @@ class _AdminEnrollmentApiScreenState extends State<AdminEnrollmentApiScreen>
           ElevatedButton(
             onPressed: () async {
               final reason = reasonController.text.trim();
+
               if (reason.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -566,6 +616,7 @@ class _AdminEnrollmentApiScreenState extends State<AdminEnrollmentApiScreen>
                     backgroundColor: Colors.orange,
                   ),
                 );
+
                 return;
               }
 

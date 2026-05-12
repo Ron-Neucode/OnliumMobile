@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'package:provider/provider.dart';
 
 import '../../providers/admin_applications_api_provider.dart';
@@ -13,32 +14,39 @@ class AdminAppointmentsScreen extends StatefulWidget {
 
 class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
   bool _isLoading = true;
+
   String? _errorMessage;
+
   List<Map<String, dynamic>> _appointments = [];
 
   @override
   void initState() {
     super.initState();
+
     _loadAppointments();
   }
 
   Future<void> _loadAppointments() async {
     setState(() {
       _isLoading = true;
+
       _errorMessage = null;
     });
 
     try {
       final provider = context.read<AdminApplicationsApiProvider>();
+
       final data = await provider.fetchAppointments();
 
       setState(() {
         _appointments = data;
+
         _isLoading = false;
       });
     } catch (e) {
       setState(() {
         _errorMessage = 'Error loading appointments: $e';
+
         _isLoading = false;
       });
     }
@@ -46,8 +54,11 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
 
   String _formatDate(dynamic value) {
     if (value == null) return '-';
+
     final parsed = DateTime.tryParse(value.toString());
+
     if (parsed == null) return value.toString();
+
     return '${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')} '
         '${parsed.hour.toString().padLeft(2, '0')}:${parsed.minute.toString().padLeft(2, '0')}';
   }
@@ -75,6 +86,7 @@ class _AdminAppointmentsScreenState extends State<AdminAppointmentsScreen> {
                   itemCount: _appointments.length,
                   itemBuilder: (context, index) {
                     final appt = _appointments[index];
+
                     final fullName =
                         '${appt['firstName'] ?? ''} ${appt['lastName'] ?? ''}'
                             .trim();

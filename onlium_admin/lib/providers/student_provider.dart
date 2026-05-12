@@ -29,49 +29,29 @@ class StudentProvider extends ChangeNotifier {
   String? get selectedCourse => _selectedCourse;
   String? get selectedType => _selectedType;
 
-  // Filters - also fetch from API with filter params
-  Future<void> setGenderFilter(String? gender) async {
+  // Filters
+  void setGenderFilter(String? gender) {
     _selectedGender = gender == 'All' ? null : gender;
+    _applyFilters();
     notifyListeners();
-    await fetchStudents(
-      gender: _selectedGender,
-      yearLevel: _selectedYear,
-      program: _selectedCourse,
-      studentType: _selectedType,
-    );
   }
 
-  Future<void> setYearFilter(String? year) async {
+  void setYearFilter(String? year) {
     _selectedYear = year == 'All' ? null : year;
+    _applyFilters();
     notifyListeners();
-    await fetchStudents(
-      gender: _selectedGender,
-      yearLevel: _selectedYear,
-      program: _selectedCourse,
-      studentType: _selectedType,
-    );
   }
 
-  Future<void> setCourseFilter(String? course) async {
+  void setCourseFilter(String? course) {
     _selectedCourse = course == 'All' ? null : course;
+    _applyFilters();
     notifyListeners();
-    await fetchStudents(
-      gender: _selectedGender,
-      yearLevel: _selectedYear,
-      program: _selectedCourse,
-      studentType: _selectedType,
-    );
   }
 
-  Future<void> setTypeFilter(String? type) async {
+  void setTypeFilter(String? type) {
     _selectedType = type == 'All' ? null : type;
+    _applyFilters();
     notifyListeners();
-    await fetchStudents(
-      gender: _selectedGender,
-      yearLevel: _selectedYear,
-      program: _selectedCourse,
-      studentType: _selectedType,
-    );
   }
 
   void clearFilters() {

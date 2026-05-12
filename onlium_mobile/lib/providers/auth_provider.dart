@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/api_config.dart';
 
 class AuthProvider extends ChangeNotifier {
-  static const String _baseUrl = 'https://localhost:7164';
-
+  static const String _baseUrl = ApiConfig.baseUrl;
   String? _token;
   String? _email;
   String? _fullName;
@@ -157,7 +157,7 @@ class AuthProvider extends ChangeNotifier {
         headers: {'Content-Type': 'application/json', 'Accept': '*/*'},
         body: jsonEncode({
           'email': email.trim(),
-          'password': password.trim(),
+          'password': password,
           'firstName': firstName.trim(),
           'lastName': lastName.trim(),
         }),
@@ -198,7 +198,10 @@ class AuthProvider extends ChangeNotifier {
       final response = await http.post(
         uri,
         headers: {'Content-Type': 'application/json', 'Accept': '*/*'},
-        body: jsonEncode({'email': email.trim(), 'password': password.trim()}),
+        body: jsonEncode({
+  'email': email.trim(),
+  'password': password,
+}),
       );
 
       if (response.statusCode == 200) {
